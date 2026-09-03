@@ -1,0 +1,293 @@
+[
+  {
+    "name": "自然人股东",
+    "value": "naturalPersonShareholder",
+    "type": "enum",
+    "isMultiple": true,
+    "description": "",
+    "status": "active",
+    "createdAt": "2026-09-03T02:50:48.177Z",
+    "updatedAt": "2026-09-03T02:53:36.536Z",
+    "changeLogs": [
+      {
+        "id": "88f7596b-870e-4c1b-90a3-ab7d1a97c5c3",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "自然人股东",
+          "value": "naturalPersonShareholder",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:50:48.177Z",
+          "updatedAt": "2026-09-03T02:50:48.177Z"
+        },
+        "createdAt": "2026-09-03T02:50:48.177Z"
+      },
+      {
+        "id": "86afa862-1395-45d0-aacf-ef8333e72801",
+        "action": "UPDATE",
+        "operator": "变量管理员",
+        "summary": "更新变量类型、是否多条",
+        "before": {
+          "name": "自然人股东",
+          "value": "naturalPersonShareholder",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:50:48.177Z",
+          "updatedAt": "2026-09-03T02:50:48.177Z"
+        },
+        "after": {
+          "name": "自然人股东",
+          "value": "naturalPersonShareholder",
+          "type": "enum",
+          "isMultiple": true,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:50:48.177Z",
+          "updatedAt": "2026-09-03T02:53:36.536Z"
+        },
+        "createdAt": "2026-09-03T02:53:36.536Z"
+      }
+    ]
+  },
+  {
+    "name": "经办律师1",
+    "value": "handlingAttorney1",
+    "type": "single",
+    "isMultiple": false,
+    "description": "多律师协作",
+    "status": "active",
+    "createdAt": "2026-09-03T02:55:58.726Z",
+    "updatedAt": "2026-09-03T09:13:31.549Z",
+    "changeLogs": [
+      {
+        "id": "90df2745-5cc0-41d6-bdde-9b4598a4dede",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "经办律师1",
+          "value": "handlingAttorney1",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:55:58.726Z",
+          "updatedAt": "2026-09-03T02:55:58.726Z"
+        },
+        "createdAt": "2026-09-03T02:55:58.726Z"
+      },
+      {
+        "id": "047a9856-67da-456e-83df-f08f1b3e5ee1",
+        "action": "UPDATE",
+        "operator": "变量管理员",
+        "summary": "更新描述",
+        "before": {
+          "name": "经办律师1",
+          "value": "handlingAttorney1",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:55:58.726Z",
+          "updatedAt": "2026-09-03T02:55:58.726Z"
+        },
+        "after": {
+          "name": "经办律师1",
+          "value": "handlingAttorney1",
+          "type": "single",
+          "isMultiple": false,
+          "description": "多律师协作",
+          "status": "active",
+          "createdAt": "2026-09-03T02:55:58.726Z",
+          "updatedAt": "2026-09-03T09:13:31.549Z"
+        },
+        "createdAt": "2026-09-03T09:13:31.549Z"
+      }
+    ]
+  },
+  {
+    "name": "经办律师2",
+    "value": "handlingAttorney2",
+    "type": "single",
+    "isMultiple": false,
+    "description": "多律师协作",
+    "status": "active",
+    "createdAt": "2026-09-03T02:56:30.709Z",
+    "updatedAt": "2026-09-03T09:13:39.313Z",
+    "changeLogs": [
+      {
+        "id": "e6be936d-8bfb-465b-a381-257a6d814137",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "经办律师2",
+          "value": "handlingAttorney2",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:56:30.709Z",
+          "updatedAt": "2026-09-03T02:56:30.709Z"
+        },
+        "createdAt": "2026-09-03T02:56:30.709Z"
+      },
+      {
+        "id": "b5a46c64-1130-41b1-adbf-36f5ae6bdaa8",
+        "action": "UPDATE",
+        "operator": "变量管理员",
+        "summary": "更新描述",
+        "before": {
+          "name": "经办律师2",
+          "value": "handlingAttorney2",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T02:56:30.709Z",
+          "updatedAt": "2026-09-03T02:56:30.709Z"
+        },
+        "after": {
+          "name": "经办律师2",
+          "value": "handlingAttorney2",
+          "type": "single",
+          "isMultiple": false,
+          "description": "多律师协作",
+          "status": "active",
+          "createdAt": "2026-09-03T02:56:30.709Z",
+          "updatedAt": "2026-09-03T09:13:39.313Z"
+        },
+        "createdAt": "2026-09-03T09:13:39.313Z"
+      }
+    ]
+  },
+  {
+    "name": "企业名称",
+    "value": "company",
+    "type": "single",
+    "isMultiple": false,
+    "description": "",
+    "status": "active",
+    "createdAt": "2026-09-03T09:12:45.978Z",
+    "updatedAt": "2026-09-03T09:12:45.978Z",
+    "changeLogs": [
+      {
+        "id": "fa5ab346-656f-4609-bdd5-5a6442f485dd",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "企业名称",
+          "value": "company",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T09:12:45.978Z",
+          "updatedAt": "2026-09-03T09:12:45.978Z"
+        },
+        "createdAt": "2026-09-03T09:12:45.978Z"
+      }
+    ]
+  },
+  {
+    "name": "律师事务所负责人",
+    "value": "lawFirmDirector",
+    "type": "single",
+    "isMultiple": false,
+    "description": "",
+    "status": "active",
+    "createdAt": "2026-09-03T16:21:48.403Z",
+    "updatedAt": "2026-09-03T16:21:48.403Z",
+    "changeLogs": [
+      {
+        "id": "27f395b0-c967-4691-bd11-5af5f7dbedeb",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "律师事务所负责人",
+          "value": "lawFirmDirector",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T16:21:48.403Z",
+          "updatedAt": "2026-09-03T16:21:48.403Z"
+        },
+        "createdAt": "2026-09-03T16:21:48.408Z"
+      }
+    ]
+  },
+  {
+    "name": "律师事务所",
+    "value": "lawFirm",
+    "type": "single",
+    "isMultiple": false,
+    "description": "",
+    "status": "active",
+    "createdAt": "2026-09-03T17:48:01.382Z",
+    "updatedAt": "2026-09-03T17:48:01.382Z",
+    "changeLogs": [
+      {
+        "id": "a0a3611d-2eab-4d7d-8583-9b9f784b4fd8",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "律师事务所",
+          "value": "lawFirm",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T17:48:01.382Z",
+          "updatedAt": "2026-09-03T17:48:01.382Z"
+        },
+        "createdAt": "2026-09-03T17:48:01.382Z"
+      }
+    ]
+  },
+  {
+    "name": "经办律师3",
+    "value": "handlingAttorney3",
+    "type": "single",
+    "isMultiple": false,
+    "description": "",
+    "status": "active",
+    "createdAt": "2026-09-03T17:57:06.819Z",
+    "updatedAt": "2026-09-03T17:57:06.819Z",
+    "changeLogs": [
+      {
+        "id": "48953077-c9be-489f-973e-6149cb7ed2d2",
+        "action": "CREATE",
+        "operator": "变量管理员",
+        "summary": "创建变量",
+        "before": null,
+        "after": {
+          "name": "经办律师3",
+          "value": "handlingAttorney3",
+          "type": "single",
+          "isMultiple": false,
+          "description": "",
+          "status": "active",
+          "createdAt": "2026-09-03T17:57:06.819Z",
+          "updatedAt": "2026-09-03T17:57:06.819Z"
+        },
+        "createdAt": "2026-09-03T17:57:06.819Z"
+      }
+    ]
+  }
+]

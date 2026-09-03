@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server.mjs",
+    "start": "node src/server.mjs",
+    "check": "node --check src/server.mjs && node --check src/templates.mjs && node --check src/projects.mjs && node --check src/variables.mjs && node --check public/projects.js && node --check public/templates.js && node --check public/variables.js && node --check public/ui-shared.js",
     "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "html-to-docx": "^1.8.0",

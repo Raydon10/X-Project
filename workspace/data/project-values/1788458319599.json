@@ -1,0 +1,68 @@
+{
+  "values": [
+    {
+      "scope": "group:1788458336187",
+      "variableValue": "lawFirm",
+      "slotIndex": 0,
+      "realValue": "君临律师事务所",
+      "updatedAt": "2026-09-03T17:59:43.812Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "group:1788458336187",
+      "variableValue": "company",
+      "slotIndex": 0,
+      "realValue": "人生无限公司",
+      "updatedAt": "2026-09-03T17:59:43.818Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "group:1788458336187",
+      "variableValue": "lawFirmDirector",
+      "slotIndex": 0,
+      "realValue": "李雷",
+      "updatedAt": "2026-09-03T17:59:43.823Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "group:1788458336187",
+      "variableValue": "handlingAttorney1",
+      "slotIndex": 0,
+      "realValue": "韩梅梅",
+      "updatedAt": "2026-09-03T17:59:43.826Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "group:1788458336187",
+      "variableValue": "handlingAttorney2",
+      "slotIndex": 0,
+      "realValue": "王华",
+      "updatedAt": "2026-09-03T17:59:43.830Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "template:1788421376042",
+      "variableValue": "company",
+      "slotIndex": 0,
+      "realValue": "人生无限公司",
+      "updatedAt": "2026-09-03T18:00:53.226Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "template:1788421376042",
+      "variableValue": "naturalPersonShareholder",
+      "slotIndex": 0,
+      "realValue": "王伟",
+      "updatedAt": "2026-09-03T18:00:53.231Z",
+      "by": "项目管理员"
+    },
+    {
+      "scope": "template:1788421376042",
+      "variableValue": "naturalPersonShareholder",
+      "slotIndex": 1,
+      "realValue": "李明明",
+      "updatedAt": "2026-09-03T18:00:53.235Z",
+      "by": "项目管理员"
+    }
+  ]
+}

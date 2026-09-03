@@ -1,0 +1,8 @@
+[
+  {
+    "id": "extract-template-variables",
+    "name": "提取模板变量",
+    "content": "请参考已存在的变量和模板文案，识别模板中按签署方、项目或日期变化的动态内容，并输出替换变量后的全部模板文案。\n\n【输入】\n1. existingVariables：系统已有变量。语义相关时必须复用已有变量的 value，不要重新命名。\n2. currentTemplateVariables：本模板上次提取的变量。语义相关时优先沿用。\n3. templateContent：模板全文文案，可能包含 Word-like HTML 格式。\n\n【输出】\n只输出严格 JSON，不要输出 Markdown 或解释：\n{\"templateText\":\"替换变量后的全部模板文案，变量位置使用 {{variableId}}\",\"variables\":[{\"name\":\"变量中文名\",\"value\":\"variableId\"}]}\n\n【规则】\n1. templateText 必须保留 templateContent 的全部模板文案，不要摘要、不要删减固定文字。\n2. 只把动态内容替换成 {{变量值}}，固定描述文字保持原样。\n3. variables 必须来自 templateText 中出现的 {{变量值}}，按首次出现顺序去重。\n4. value 以英文字母开头，仅含英文、数字、下划线。\n5. 语义相关时必须复用 existingVariables 或 currentTemplateVariables 的 value；无匹配才创建新 value 并配中文 name。\n6. 模板中如已有变量占位（{{xxx}}、【xxx】等形式）但与系统已有变量同义时，必须改写为系统已有变量的 value。",
+    "updatedAt": "2026-09-03T17:23:34.387Z"
+  }
+]
