@@ -482,6 +482,7 @@ ${JSON.stringify(input, null, 2)}
 2. 只变量化动态内容；“本页无正文”、法规全称等固定文字不要输出。
 3. value 以英文字母开头，仅含英文、数字、下划线。
 4. 语义相关时必须复用已有变量 value；无匹配才创建新 value 并配中文 name。
+5. 模板中如已有变量占位（{{xxx}}、【xxx】、【变量名】等形式）但与系统已有变量同义时，必须改写为系统已有变量的 value：original 给出模板里的占位原文（如“{{oldName}}”或“【公司全称】”），value 使用系统已有变量的 value。
 
 示例：templateContent 为“公司名称：<u>星河科技</u>，日期：2026年9月3日”时输出：
 {"replacements":[{"original":"星河科技","name":"公司名称","value":"companyName"},{"original":"2026年9月3日","name":"签署日期","value":"signDate"}]}`;
@@ -888,7 +889,8 @@ function defaultPrompts() {
 1. original 必须是 templateContent 的连续子串、逐字符一致，不要包含 HTML 标签（给"【张三】"而非"<u>【张三】</u>"）；系统会在原模板上替换，标签与格式自动保留；
 2. 只变量化动态内容，"本页无正文"、法规全称等固定文字不要输出；
 3. value 以英文字母开头，仅含英文、数字、下划线；
-4. 语义相关时必须复用 existingVariables 或 currentTemplateVariables 的 value；无匹配才创建新 value 并配中文 name。`,
+4. 语义相关时必须复用 existingVariables 或 currentTemplateVariables 的 value；无匹配才创建新 value 并配中文 name；
+5. 模板中如已有变量占位（{{xxx}}、【xxx】等形式）但与系统已有变量同义时，必须改写：original 给出模板里的占位原文，value 使用系统已有变量的 value。`,
     updatedAt: new Date().toISOString(),
   }];
 }

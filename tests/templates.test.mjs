@@ -482,6 +482,31 @@ test('skips invalid replacement items instead of failing the whole extraction', 
   });
 });
 
+test('rewrites synonymous template placeholders to use existing system variable values', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '同义占位模板', detail: '' }, { timestamp: 20260903194000 });
+    // 模板里已用 {{oldCompany}} 占位，但系统已有变量是 companyName
+    await updateTemplate(store, template.id, { previewText: '公司：{{oldCompany}}', previewHtml: '<p>公司：{{oldCompany}}</p>' });
+
+    const updated = await analyzeTemplateVariables(store, template.id, {
+      prompt: '提取变量',
+      textOverride: '公司：{{oldCompany}}',
+      textHtml: '<p>公司：{{oldCompany}}</p>',
+    }, [
+      { name: '公司名称', value: 'companyName', type: 'single', description: '公司名称' },
+    ], async () => JSON.stringify({
+      replacements: [
+        { original: '{{oldCompany}}', name: '公司名称', value: 'companyName' },
+      ],
+    }));
+
+    assert.match(updated.previewHtml, /data-variable="companyName">\{\{companyName\}\}<\/span>/);
+    assert.ok(!updated.previewHtml.includes('oldCompany'));
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName']);
+    assert.equal(updated.extractedVariables[0].matchStatus, 'existing');
+  });
+});
+
 async function buildDocxBuffer(documentXml) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'docx-preview-'));
   try {
