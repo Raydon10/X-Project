@@ -8,11 +8,11 @@
   </head>
   <body>
     <main>
-      <aside>
+      <aside class="nav-side">
         <div class="brand">签字页工作台</div>
+        <a href="/projects.html">项目管理</a>
         <a href="/templates.html">模板管理</a>
         <a class="active" href="/variables.html">变量管理</a>
-        <a href="/projects.html">项目管理</a>
       </aside>
       <section class="workspace">
         <header id="variableHeader">
@@ -33,44 +33,50 @@
           </select>
         </section>
 
-        <section class="layout" id="variableModule">
-          <section class="panel">
-            <div class="panel-title">
-              <h2>变量列表</h2>
-              <span id="count">0 个变量</span>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>变量名</th>
-                  <th>变量值</th>
-                  <th>变量类型</th>
-                  <th>更新时间</th>
-                </tr>
-              </thead>
-              <tbody id="variableRows"></tbody>
-            </table>
-          </section>
-
-          <section class="panel detail">
-            <div class="panel-title">
-              <h2 id="detailTitle">变量详情</h2>
-              <button id="deleteVariable" class="danger">删除</button>
-            </div>
-            <form id="variableForm">
-              <label>变量名<input name="name" required></label>
-              <label>变量值<input name="value" required pattern="[A-Za-z][A-Za-z0-9_]*"></label>
-              <label>变量类型<select name="type"><option value="single">单一：每个项目只录入一个值</option><option value="enum">枚举：项目录入时可录入多条</option></select></label>
-              <label>描述<textarea name="description" placeholder="说明变量用途"></textarea></label>
-              <label>状态<select name="status"><option value="active">启用</option><option value="inactive">停用</option></select></label>
-              <button type="submit">保存变量</button>
-            </form>
-            <h3>变更日志</h3>
-            <div id="changeLogs" class="logs"></div>
-          </section>
+        <section class="panel list-only">
+          <div class="panel-title">
+            <h2>变量列表</h2>
+            <span id="count">0 个变量</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>变量名</th>
+                <th>变量值</th>
+                <th>变量类型</th>
+                <th>更新时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="variableRows"></tbody>
+          </table>
         </section>
       </section>
     </main>
+
+    <div class="drawer-mask" id="drawerMask"></div>
+    <aside class="drawer" id="variableDrawer">
+      <div class="drawer-head">
+        <h2 id="detailTitle">变量详情</h2>
+        <div class="drawer-actions">
+          <button id="deleteVariable" class="danger">删除</button>
+          <button class="drawer-close" id="variableDrawerClose" type="button">×</button>
+        </div>
+      </div>
+      <div class="drawer-body">
+        <form id="variableForm">
+          <label>变量名<input name="name" required></label>
+          <label>变量值<input name="value" required pattern="[A-Za-z][A-Za-z0-9_]*"></label>
+          <label>变量类型<select name="type"><option value="single">单一：每个项目只录入一个值</option><option value="enum">枚举：项目录入时可录入多条</option></select></label>
+          <label>描述<textarea name="description" placeholder="说明变量用途"></textarea></label>
+          <label>状态<select name="status"><option value="active">启用</option><option value="inactive">停用</option></select></label>
+          <button type="submit">保存变量</button>
+        </form>
+        <h3>变更日志</h3>
+        <div id="changeLogs" class="logs"></div>
+      </div>
+    </aside>
+
     <div id="toast"></div>
     <script src="/variables.js" type="module"></script>
   </body>

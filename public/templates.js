@@ -21,8 +21,11 @@ const aiStatus = document.querySelector('#aiStatus');
 const aiDebug = document.querySelector('#aiDebug');
 const documentStatus = document.querySelector('#templateDocumentStatus');
 const variableStatus = document.querySelector('#templateVariableStatus');
+const drawer = document.querySelector('#templateDrawer');
+const drawerMask = document.querySelector('#drawerMask');
+const drawerClose = document.querySelector('#templateDrawerClose');
 
-document.querySelector('#newTemplate').addEventListener('click', () => selectTemplate(null));
+document.querySelector('#newTemplate').addEventListener('click', () => openDrawer(() => selectTemplate(null)));
 document.querySelector('#templateKeyword').addEventListener('input', loadTemplates);
 scanButton.addEventListener('click', () => scanAiTools(true));
 document.querySelector('#templateFile').addEventListener('change', importTemplateFile);
@@ -33,9 +36,28 @@ document.querySelector('#savePrompt').addEventListener('click', savePrompt);
 extractButton.addEventListener('click', extractTemplateVariables);
 document.querySelector('#restoreVariables').addEventListener('click', restoreTemplateVariables);
 document.querySelectorAll('[data-tab]').forEach((tab) => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
+drawerClose.addEventListener('click', closeDrawer);
+drawerMask.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
 await Promise.all([loadTemplates(), loadPrompts(), scanAiTools()]);
-selectTemplate(templates[0] || null);
+
+function openDrawer(after) {
+  // 先填充内容再打开抽屉，避免 transform 动画期间 contenteditable 渲染异常
+  if (typeof after === 'function') after();
+  // 强制 reflow，确保 contenteditable 等元素在动画前已进入布局
+  void drawer.offsetHeight;
+  drawer.classList.add('show');
+  drawerMask.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawer() {
+  drawer.classList.remove('show');
+  drawerMask.classList.remove('show');
+  document.body.style.overflow = '';
+  selectedTemplateId = '';
+}
 
 async function loadTemplates() {
   const keyword = document.querySelector('#templateKeyword').value;
@@ -51,21 +73,26 @@ async function loadPrompts() {
 function renderTemplates() {
   templateCount.textContent = `${templates.length} 个模板`;
   templateRows.innerHTML = templates.map((item) => `
-    <tr class="${String(item.id) === String(selectedTemplateId) ? 'selected' : ''}" data-id="${item.id}">
+    <tr data-id="${item.id}">
       <td><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.detail || '无详情')}</small></td>
       <td><code>${item.id}</code></td>
       <td>${item.document ? escapeHtml(item.document.fileName) : '未导入'}</td>
+      <td>${item.extractedVariables?.length || 0} 个</td>
       <td>${formatTime(item.updatedAt)}</td>
+      <td class="row-actions"><button type="button" class="open-detail" data-id="${item.id}">详情</button></td>
     </tr>
-  `).join('');
-  templateRows.querySelectorAll('tr').forEach((row) => {
-    row.addEventListener('click', () => selectTemplate(templates.find((item) => String(item.id) === row.dataset.id)));
+  `).join('') || '<tr><td colspan="6" class="empty">暂无模板</td></tr>';
+  templateRows.querySelectorAll('.open-detail').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tpl = templates.find((item) => String(item.id) === btn.dataset.id);
+      openDrawer(() => selectTemplate(tpl));
+    });
   });
 }
 
 function selectTemplate(template) {
   selectedTemplateId = template?.id || '';
-  detailTitle.textContent = template ? '模板详情' : '新建模板';
+  detailTitle.textContent = template ? template.name : '新建模板';
   deleteButton.disabled = !template;
   form.name.value = template?.name || '';
   form.id.value = template?.id || '保存后按时间戳生成';
@@ -84,7 +111,6 @@ function selectTemplate(template) {
     : '<p class="empty">暂无提取变量</p>';
   templateLogs.innerHTML = renderLogs(template?.changeLogs);
   renderAiDebug(template?.aiDebug);
-  renderTemplates();
 }
 
 function renderAiDebug(debug) {
@@ -124,6 +150,7 @@ async function saveTemplate(event) {
       : await request('/api/templates', { method: 'POST', body: JSON.stringify(payload) });
     notice(toast, '模板已保存');
     await loadTemplates();
+    selectedTemplateId = saved.id;
     selectTemplate(saved);
   } catch (error) {
     notice(toast, error.message, true);
@@ -135,8 +162,8 @@ async function removeSelectedTemplate() {
   try {
     await request(`/api/templates/${selectedTemplateId}`, { method: 'DELETE' });
     notice(toast, '模板已删除');
+    closeDrawer();
     await loadTemplates();
-    selectTemplate(templates[0] || null);
   } catch (error) {
     notice(toast, error.message, true);
   }
@@ -216,6 +243,7 @@ async function extractTemplateVariables() {
     setAiStatus(message);
     notice(toast, message);
     await loadTemplates();
+    selectedTemplateId = saved.id;
     selectTemplate(saved);
     activateTab('variables');
   } catch (error) {

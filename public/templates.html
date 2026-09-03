@@ -8,11 +8,11 @@
   </head>
   <body>
     <main>
-      <aside>
+      <aside class="nav-side">
         <div class="brand">签字页工作台</div>
+        <a href="/projects.html">项目管理</a>
         <a class="active" href="/templates.html">模板管理</a>
         <a href="/variables.html">变量管理</a>
-        <a href="/projects.html">项目管理</a>
       </aside>
       <section class="workspace">
         <section id="templateModule">
@@ -29,81 +29,88 @@
             <input id="templateKeyword" placeholder="搜索模板名称或模板id">
           </section>
 
-          <section class="layout wide">
-            <section class="panel">
-              <div class="panel-title">
-                <h2>模板列表</h2>
-                <span id="templateCount">0 个模板</span>
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>模板名称</th>
-                    <th>模板id</th>
-                    <th>导入模板</th>
-                    <th>更新时间</th>
-                  </tr>
-                </thead>
-                <tbody id="templateRows"></tbody>
-              </table>
-            </section>
-
-            <section class="panel detail">
-              <div class="panel-title">
-                <h2 id="templateDetailTitle">模板详情</h2>
-                <button id="deleteTemplate" class="danger">删除</button>
-              </div>
-              <div class="template-summary">
-                <span id="templateDocumentStatus">未导入模板</span>
-                <span id="templateVariableStatus">0 个变量</span>
-              </div>
-              <nav class="template-tabs">
-                <button class="active" data-tab="basic" type="button">基础信息</button>
-                <button data-tab="preview" type="button">模板预览</button>
-                <button data-tab="variables" type="button">变量提取</button>
-                <button data-tab="logs" type="button">变更日志</button>
-              </nav>
-              <div class="tab-panel active" data-panel="basic">
-                <form id="templateForm">
-                  <label>模板名称<input name="name" required></label>
-                  <label>模板id<input name="id" disabled></label>
-                  <label>模板详情<textarea name="detail" placeholder="说明模板用途、适用场景和注意事项"></textarea></label>
-                  <label>状态<select name="status"><option value="active">启用</option><option value="inactive">停用</option></select></label>
-                  <button type="submit">保存模板</button>
-                </form>
-              </div>
-              <div class="tab-panel" data-panel="preview">
-                <div class="tab-actions">
-                  <label class="file-import">导入模板<input id="templateFile" type="file" accept=".doc,.docx"></label>
-                  <button id="savePreview" type="button">保存预览编辑</button>
-                </div>
-                <div id="templatePreview" class="preview-editor" contenteditable="true" data-placeholder="导入 DOCX 后显示可预览文本，也可粘贴模板文本用于 AI 提取"></div>
-              </div>
-              <div class="tab-panel" data-panel="variables">
-                <h3>变量结果</h3>
-                <div id="templateVariables" class="token-list"></div>
-                <h3>AI 提取</h3>
-                <div class="ai-box">
-                  <textarea id="aiPrompt"></textarea>
-                  <div class="button-row">
-                    <button id="savePrompt">保存提示词</button>
-                    <button id="extractVariables">AI 提取变量</button>
-                    <button id="scanAiTools" type="button">检测云端 AI</button>
-                    <button id="restoreVariables">还原上次提取</button>
-                  </div>
-                  <div id="aiStatus" class="status-line">尚未执行 AI 操作</div>
-                  <div id="aiDebug" class="ai-debug"></div>
-                </div>
-                <div id="aiTools" class="logs"></div>
-              </div>
-              <div class="tab-panel" data-panel="logs">
-                <div id="templateLogs" class="logs"></div>
-              </div>
-            </section>
+          <section class="panel list-only">
+            <div class="panel-title">
+              <h2>模板列表</h2>
+              <span id="templateCount">0 个模板</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>模板名称</th>
+                  <th>模板id</th>
+                  <th>导入模板</th>
+                  <th>变量</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="templateRows"></tbody>
+            </table>
           </section>
         </section>
       </section>
     </main>
+
+    <div class="drawer-mask" id="drawerMask"></div>
+    <aside class="drawer" id="templateDrawer">
+      <div class="drawer-head">
+        <h2 id="templateDetailTitle">模板详情</h2>
+        <div class="drawer-actions">
+          <button id="deleteTemplate" class="danger">删除</button>
+          <button class="drawer-close" id="templateDrawerClose" type="button">×</button>
+        </div>
+      </div>
+      <div class="template-summary">
+        <span id="templateDocumentStatus">未导入模板</span>
+        <span id="templateVariableStatus">0 个变量</span>
+      </div>
+      <nav class="template-tabs">
+        <button class="active" data-tab="basic" type="button">基础信息</button>
+        <button data-tab="preview" type="button">模板预览</button>
+        <button data-tab="variables" type="button">变量提取</button>
+        <button data-tab="logs" type="button">变更日志</button>
+      </nav>
+      <div class="drawer-body">
+        <div class="tab-panel active" data-panel="basic">
+          <form id="templateForm">
+            <label>模板名称<input name="name" required></label>
+            <label>模板id<input name="id" disabled></label>
+            <label>模板详情<textarea name="detail" placeholder="说明模板用途、适用场景和注意事项"></textarea></label>
+            <label>状态<select name="status"><option value="active">启用</option><option value="inactive">停用</option></select></label>
+            <button type="submit">保存模板</button>
+          </form>
+        </div>
+        <div class="tab-panel" data-panel="preview">
+          <div class="tab-actions">
+            <label class="file-import">导入模板<input id="templateFile" type="file" accept=".doc,.docx"></label>
+            <button id="savePreview" type="button">保存预览编辑</button>
+          </div>
+          <div id="templatePreview" class="preview-editor" contenteditable="true" data-placeholder="导入 DOCX 后显示可预览文本，也可粘贴模板文本用于 AI 提取"></div>
+        </div>
+        <div class="tab-panel" data-panel="variables">
+          <h3>变量结果</h3>
+          <div id="templateVariables" class="token-list"></div>
+          <h3>AI 提取</h3>
+          <div class="ai-box">
+            <textarea id="aiPrompt"></textarea>
+            <div class="button-row">
+              <button id="savePrompt">保存提示词</button>
+              <button id="extractVariables">AI 提取变量</button>
+              <button id="scanAiTools" type="button">检测云端 AI</button>
+              <button id="restoreVariables">还原上次提取</button>
+            </div>
+            <div id="aiStatus" class="status-line">尚未执行 AI 操作</div>
+            <div id="aiDebug" class="ai-debug"></div>
+          </div>
+          <div id="aiTools" class="logs"></div>
+        </div>
+        <div class="tab-panel" data-panel="logs">
+          <div id="templateLogs" class="logs"></div>
+        </div>
+      </div>
+    </aside>
+
     <div id="toast"></div>
     <script src="/templates.js" type="module"></script>
   </body>

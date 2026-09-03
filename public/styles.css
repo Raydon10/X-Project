@@ -21,6 +21,15 @@ aside {
   padding: 18px 14px;
 }
 
+aside.nav-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: #111827;
+  color: white;
+  padding: 18px 14px;
+}
+
 .brand {
   font-size: 18px;
   font-weight: 700;
@@ -424,7 +433,7 @@ code {
 
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; }
-  aside { display: none; }
+  aside.nav-side { display: none; }
   .workspace { padding: 16px; }
   header,
   .toolbar { display: block; }
@@ -432,6 +441,7 @@ code {
   .layout,
   .layout.wide { grid-template-columns: 1fr; }
   .panel { overflow: auto; }
+  .drawer { width: 100vw; }
 }
 
 /* ========== 项目管理模块 ========== */
@@ -610,4 +620,123 @@ code {
 .export-single {
   font-size: 12px;
   padding: 6px 10px;
+}
+
+/* ========== 大抽屉详情面板 ========== */
+.drawer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .42);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+  z-index: 40;
+}
+
+.drawer-mask.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(880px, 94vw);
+  background: white;
+  color: #1f2937;
+  border-left: 1px solid #e2e8f0;
+  box-shadow: -8px 0 30px #1b2b5522;
+  transform: translateX(100%);
+  transition: transform .28s ease;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.drawer label,
+.drawer h2,
+.drawer h3,
+.drawer p,
+.drawer span,
+.drawer td,
+.drawer th,
+.drawer strong,
+.drawer small,
+.drawer code,
+.drawer .preview-editor,
+.drawer .preview-editor p,
+.drawer .preview-editor td {
+  color: #1f2937;
+}
+
+.drawer.show {
+  transform: translateX(0);
+}
+
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid #e5eaf2;
+  flex-shrink: 0;
+}
+
+.drawer-head h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-close {
+  border: 0;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.drawer-close:hover { color: #1f2937; }
+
+.drawer > .template-summary {
+  padding: 10px 22px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.drawer > .template-tabs {
+  padding: 0 22px;
+  flex-shrink: 0;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px 32px;
+}
+
+.panel.list-only {
+  margin-bottom: 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.row-actions button {
+  font-size: 12px;
+  padding: 4px 10px;
 }

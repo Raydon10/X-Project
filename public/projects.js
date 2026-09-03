@@ -36,7 +36,29 @@ const elements = {
   logs: $('projectLogs'),
   toast: $('toast'),
   deleteBtn: $('deleteProject'),
+  drawer: $('projectDrawer'),
+  drawerMask: $('drawerMask'),
+  drawerClose: $('projectDrawerClose'),
 };
+
+function openDrawer(after) {
+  if (typeof after === 'function') after();
+  elements.drawer.classList.add('show');
+  elements.drawerMask.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawer() {
+  elements.drawer.classList.remove('show');
+  elements.drawerMask.classList.remove('show');
+  document.body.style.overflow = '';
+  state.currentProject = null;
+  renderProjectList();
+}
+
+elements.drawerClose.onclick = closeDrawer;
+elements.drawerMask.onclick = closeDrawer;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
 /* ---------------------------- 项目列表 ---------------------------- */
 async function loadProjects() {
@@ -49,22 +71,22 @@ function renderProjectList() {
   elements.rows.innerHTML = state.projects.length
     ? state.projects.map((p) => {
         const tplCount = (p.templateIds || []).length;
-        const progress = (state.progress && state.progress.projectId === p.id) ? Math.round(state.progress.ratio * 100) : null;
-        return `<tr data-id="${p.id}" class="${state.currentProject?.id === p.id ? 'selected' : ''}">
+        return `<tr data-id="${p.id}">
           <td>${escapeHtml(p.name)}<small>${escapeHtml(p.detail || '—')}</small></td>
           <td>${p.id}</td>
           <td>${tplCount} 个模板</td>
-          <td>${progress !== null ? progress + '%' : '—'}</td>
+          <td>—</td>
           <td>${formatTime(p.updatedAt)}</td>
+          <td class="row-actions"><button type="button" class="open-detail" data-id="${p.id}">详情</button></td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="5" class="empty">暂无项目</td></tr>';
+    : '<tr><td colspan="6" class="empty">暂无项目</td></tr>';
   bindRowClicks();
 }
 
 function bindRowClicks() {
-  for (const row of elements.rows.querySelectorAll('tr[data-id]')) {
-    row.onclick = () => selectProject(Number(row.dataset.id));
+  for (const btn of elements.rows.querySelectorAll('.open-detail')) {
+    btn.onclick = () => openDrawer(() => selectProject(Number(btn.dataset.id)));
   }
 }
 
@@ -474,13 +496,12 @@ async function downloadFile(url, method, body) {
 }
 
 /* ---------------------------- 项目 CRUD ---------------------------- */
-$('newProject').onclick = () => {
+$('newProject').onclick = () => openDrawer(() => {
   state.currentProject = null;
   elements.form.reset();
   elements.form.id.value = '';
   elements.detailTitle.textContent = '新建项目';
-  renderProjectList();
-};
+});
 
 elements.form.onsubmit = async (e) => {
   e.preventDefault();
@@ -492,12 +513,14 @@ elements.form.onsubmit = async (e) => {
         body: JSON.stringify(data),
       });
       notice(elements.toast, '已保存');
+      await loadProjects();
+      await selectProject(state.currentProject.id);
     } else {
-      await request('/api/projects', { method: 'POST', body: JSON.stringify(data) });
+      const created = await request('/api/projects', { method: 'POST', body: JSON.stringify(data) });
       notice(elements.toast, '已创建');
+      await loadProjects();
+      await selectProject(created.id);
     }
-    await loadProjects();
-    if (state.currentProject) await selectProject(state.currentProject.id);
   } catch (error) {
     notice(elements.toast, error.message, true);
   }
@@ -509,9 +532,7 @@ elements.deleteBtn.onclick = async () => {
   try {
     await request(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' });
     notice(elements.toast, '已删除');
-    state.currentProject = null;
-    elements.form.reset();
-    elements.detailTitle.textContent = '项目详情';
+    closeDrawer();
     await loadProjects();
   } catch (error) {
     notice(elements.toast, error.message, true);
