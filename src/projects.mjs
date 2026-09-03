@@ -218,7 +218,7 @@ export async function createGroup(store, projectId, input) {
   const project = await getProject(store, projectId);
   if (!project) throw new Error('项目不存在');
   const groups = await store.readGroups();
-  const group = buildGroup(projectId, input, null, Date.now());
+  const group = buildGroup(projectId, input, null, nextNumericId(groups));
   if (groups.some((g) => g.id === group.id)) throw new Error('编组id不可重复');
   // 校验 groupIndex 在项目内唯一（1-10 范围）
   if (group.groupIndex) {
@@ -343,7 +343,7 @@ export async function listValues(store, projectId, options = {}) {
   if (options.templateId) {
     // 返回该模板生效的值（在组内 → 取组 scope；不在 → 取 template scope）
     const groups = await store.readGroups();
-    const scope = resolveTemplateScope(groups, Number(options.templateId));
+    const scope = resolveTemplateScope(groups, projectId, Number(options.templateId));
     return values.filter((v) => v.scope === scope);
   }
   return values;
@@ -391,15 +391,16 @@ async function resolveScopeFromInput(store, projectId, body) {
   if (body.groupId) return `group:${Number(body.groupId)}`;
   if (body.templateId) {
     const groups = await store.readGroups();
-    return resolveTemplateScope(groups, Number(body.templateId));
+    return resolveTemplateScope(groups, projectId, Number(body.templateId));
   }
   throw new Error('缺少 scope / groupId / templateId');
 }
 
 /** 给定模板 id，找到其所属 scope（组内→组 scope；否则→template scope） */
-function resolveTemplateScope(groups, templateId) {
+function resolveTemplateScope(groups, projectId, templateId) {
   const tid = Number(templateId);
-  const group = groups.find((g) => (g.templateIds || []).includes(tid));
+  const pid = Number(projectId);
+  const group = groups.find((g) => g.projectId === pid && (g.templateIds || []).includes(tid));
   return group ? `group:${group.id}` : `template:${tid}`;
 }
 
@@ -422,7 +423,7 @@ export async function getProgress(store, templateStore, projectId) {
   const templateProgress = [];
   for (const tid of (project.templateIds || [])) {
     const t = templateMap.get(tid);
-    const scope = resolveTemplateScope(groups, tid);
+    const scope = resolveTemplateScope(groups, project.id, tid);
     const p = computeTemplateProgress(t, values, scope);
     templateProgress.push({ templateId: tid, name: t?.name || '', scope, ...p });
   }
@@ -459,7 +460,7 @@ export async function getProgressByTemplate(store, templateStore, projectId, tem
   const groups = await store.readGroups();
   const values = await store.readValues(projectId);
   const t = (await templateStore.readTemplates()).find((x) => x.id === Number(templateId));
-  const scope = resolveTemplateScope(groups, Number(templateId));
+  const scope = resolveTemplateScope(groups, project.id, Number(templateId));
   return { templateId: Number(templateId), name: t?.name || '', scope, ...computeTemplateProgress(t, values, scope) };
 }
 
@@ -500,7 +501,7 @@ export async function renderSignaturePage(store, templateStore, projectId, templ
   if (!project) throw new Error('项目不存在');
   if (!(project.templateIds || []).includes(Number(templateId))) throw new Error('模板未挂接到该项目');
   const groups = await store.readGroups();
-  const scope = resolveTemplateScope(groups, Number(templateId));
+  const scope = resolveTemplateScope(groups, project.id, Number(templateId));
   const values = await store.readValues(projectId);
   const template = (await templateStore.readTemplates()).find((t) => t.id === Number(templateId));
   if (!template) throw new Error('模板不存在');
@@ -555,7 +556,7 @@ export async function exportSingle(store, templateStore, projectId, templateId, 
   }
   const project = await getProject(store, projectId);
   const groups = await store.readGroups();
-  const scope = resolveTemplateScope(groups, Number(templateId));
+  const scope = resolveTemplateScope(groups, project.id, Number(templateId));
   const values = await store.readValues(projectId);
   const template = (await templateStore.readTemplates()).find((t) => t.id === Number(templateId));
   if (!template) throw new Error('模板不存在');
@@ -751,6 +752,13 @@ function buildProject(input, current = null, fallbackId = null) {
   if (!Number.isFinite(project.id)) throw new Error('项目id必须是数字');
   if (!project.name) throw new Error('项目名称不能为空');
   return project;
+}
+
+function nextNumericId(existingItems = []) {
+  const existing = new Set(existingItems.map((item) => Number(item.id)));
+  let id = Date.now();
+  while (existing.has(id)) id += 1;
+  return id;
 }
 
 function buildGroup(projectId, input, current = null, fallbackId = null) {

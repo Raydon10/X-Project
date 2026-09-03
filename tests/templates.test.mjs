@@ -25,6 +25,24 @@ test('cloud AI config uses Zhipu GLM without exposing the API key', () => {
   assert.equal(JSON.stringify(config).includes('5b71ba'), false);
 });
 
+test('migrates old default prompt persisted in workspace but preserves custom prompt', async () => {
+  await withStore(async (store) => {
+    await store.writePrompts([{
+      id: 'extract-template-variables',
+      name: '提取模板变量',
+      content: '你是签字页模板变量识别助手。只返回 JSON，格式为 {"variables":[{"name":"变量名","value":"variableId"}]}。变量值必须使用英文、数字或下划线，并以英文字母开头。',
+      updatedAt: '2026-09-03T00:00:00.000Z',
+    }]);
+    const migrated = await store.readPrompts();
+    assert.match(migrated[0].content, /参考已存在的变量/);
+    assert.match(migrated[0].content, /输出替换变量后的全部模板文案/);
+
+    await store.writePrompts([{ id: 'extract-template-variables', name: '提取模板变量', content: '用户自定义提示词', updatedAt: '2026-09-03T00:00:00.000Z' }]);
+    const custom = await store.readPrompts();
+    assert.equal(custom[0].content, '用户自定义提示词');
+  });
+});
+
 async function withStore(run) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'template-module-'));
   try {

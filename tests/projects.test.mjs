@@ -228,6 +228,26 @@ test('renders signature page with real values replacing placeholders', async () 
   });
 });
 
+test('renders grouped template values from the current project when templates are reused', async () => {
+  await withStores(async ({ projectStore, templateStore, nextId }) => {
+    const t1 = await makeTemplate(templateStore, 'T1', [{ name: '公司', value: 'companyName' }], nextId);
+    const p1 = await createProject(projectStore, { name: 'P1', detail: '' });
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    const p2 = await createProject(projectStore, { name: 'P2', detail: '' });
+    await linkTemplates(projectStore, p1.id, [t1.id]);
+    await linkTemplates(projectStore, p2.id, [t1.id]);
+    const g2 = await createGroup(projectStore, p2.id, { name: '组1', templateIds: [t1.id] });
+    const g1 = await createGroup(projectStore, p1.id, { name: '组1', templateIds: [t1.id] });
+    await setValue(projectStore, p1.id, { groupId: g1.id, variableValue: 'companyName', realValue: '甲公司' });
+    await setValue(projectStore, p2.id, { groupId: g2.id, variableValue: 'companyName', realValue: '乙公司' });
+
+    const rendered = await renderSignaturePage(projectStore, templateStore, p1.id, t1.id);
+    assert.equal(rendered.scope, `group:${g1.id}`);
+    assert.ok(rendered.html.includes('甲公司'), '应使用当前项目编组的真实值');
+    assert.ok(!rendered.html.includes('{{companyName}}'), '当前项目已录入时不应保留占位符');
+  });
+});
+
 test('batch export rejects when any template incomplete', async () => {
   await withStores(async ({ projectStore, templateStore, nextId }) => {
     const t1 = await makeTemplate(templateStore, 'T1', [{ name: '公司', value: 'companyName' }], nextId);
@@ -240,6 +260,23 @@ test('batch export rejects when any template incomplete', async () => {
       () => exportBatch(projectStore, templateStore, project.id, [t1.id, t2.id], 'docx'),
       /未填完/,
     );
+  });
+});
+
+test('batch export succeeds for a complete group', async () => {
+  await withStores(async ({ projectStore, templateStore, nextId }) => {
+    const t1 = await makeTemplate(templateStore, 'T1', [{ name: '公司', value: 'companyName' }], nextId);
+    const t2 = await makeTemplate(templateStore, 'T2', [{ name: '日期', value: 'signDate' }], nextId);
+    const project = await createProject(projectStore, { name: 'P', detail: '' });
+    await linkTemplates(projectStore, project.id, [t1.id, t2.id]);
+    const group = await createGroup(projectStore, project.id, { name: '组1', templateIds: [t1.id, t2.id] });
+    await setValue(projectStore, project.id, { groupId: group.id, variableValue: 'companyName', realValue: '甲公司' });
+    await setValue(projectStore, project.id, { groupId: group.id, variableValue: 'signDate', realValue: '2026-09-04' });
+
+    const result = await exportBatch(projectStore, templateStore, project.id, group.templateIds, 'docx');
+    assert.equal(result.mime, 'application/zip');
+    assert.ok(result.fileName.includes('批量导出'));
+    assert.ok(result.buffer.length > 0);
   });
 });
 

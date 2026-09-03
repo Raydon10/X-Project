@@ -20,7 +20,7 @@
             <div>
               <p class="eyebrow">TEMPLATE CENTER</p>
               <h1>模板管理</h1>
-              <p>维护签字页模板，导入原始 DOC/DOCX，并通过本地 AI 提取候选变量。</p>
+              <p>维护签字页模板，导入原始 DOC/DOCX，并通过云端 AI 提取候选变量。</p>
             </div>
             <button id="newTemplate">新建模板</button>
           </header>
@@ -68,7 +68,7 @@
       <nav class="template-tabs">
         <button class="active" data-tab="basic" type="button">基础信息</button>
         <button data-tab="preview" type="button">模板预览</button>
-        <button data-tab="variables" type="button">变量提取</button>
+        <button data-tab="variables" type="button">提取变量</button>
         <button data-tab="logs" type="button">变更日志</button>
       </nav>
       <div class="drawer-body">
@@ -89,7 +89,7 @@
           <div id="templatePreview" class="preview-editor" contenteditable="true" data-placeholder="导入 DOCX 后显示可预览文本，也可粘贴模板文本用于 AI 提取"></div>
         </div>
         <div class="tab-panel" data-panel="variables">
-          <h3>变量结果</h3>
+          <h3>提取变量</h3>
           <div id="templateVariables" class="token-list"></div>
           <h3>AI 提取</h3>
           <div class="ai-box">

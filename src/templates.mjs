@@ -56,7 +56,10 @@ export class TemplateStore {
 
   async readPrompts() {
     await this.initialize();
-    return JSON.parse(await fs.readFile(this.promptFile, 'utf8'));
+    const prompts = JSON.parse(await fs.readFile(this.promptFile, 'utf8'));
+    const migrated = migrateDefaultPrompts(prompts);
+    if (migrated.changed) await this.writePrompts(migrated.prompts);
+    return migrated.prompts;
   }
 
   async writePrompts(prompts) {
@@ -879,18 +882,41 @@ function defaultPrompts() {
   return [{
     id: 'extract-template-variables',
     name: '提取模板变量',
-    content: `提取模板中按签署方变化的动态内容（公司名称、签署人、日期、编号等）并变量化，供批量生成正式签署页时替换为各签署方的实际值；固定描述文字保持原样。
+    content: `请参考已存在的变量和模板文案，识别模板中按签署方、项目或日期变化的动态内容，并输出替换变量后的全部模板文案。
 
-【输入】existingVariables（系统已有变量）、currentTemplateVariables（本模板上次提取的变量）、templateContent（模板全文，含 HTML 格式）
+【输入】
+1. existingVariables：系统已有变量。语义相关时必须复用已有变量的 value，不要重新命名。
+2. currentTemplateVariables：本模板上次提取的变量。语义相关时优先沿用。
+3. templateContent：模板全文文案，可能包含 Word-like HTML 格式。
 
-【输出】只输出严格 JSON：{"replacements":[{"original":"需要变量化的原文精确片段","name":"变量中文名","value":"variableId"}]}
+【输出】
+只输出严格 JSON，不要输出 Markdown 或解释：
+{"templateText":"替换变量后的全部模板文案，变量位置使用 {{variableId}}","variables":[{"name":"变量中文名","value":"variableId"}]}
 
 【规则】
-1. original 必须是 templateContent 的连续子串、逐字符一致，不要包含 HTML 标签（给"【张三】"而非"<u>【张三】</u>"）；系统会在原模板上替换，标签与格式自动保留；
-2. 只变量化动态内容，"本页无正文"、法规全称等固定文字不要输出；
-3. value 以英文字母开头，仅含英文、数字、下划线；
-4. 语义相关时必须复用 existingVariables 或 currentTemplateVariables 的 value；无匹配才创建新 value 并配中文 name；
-5. 模板中如已有变量占位（{{xxx}}、【xxx】等形式）但与系统已有变量同义时，必须改写：original 给出模板里的占位原文，value 使用系统已有变量的 value。`,
+1. templateText 必须保留 templateContent 的全部模板文案，不要摘要、不要删减固定文字。
+2. 只把动态内容替换成 {{变量值}}，固定描述文字保持原样。
+3. variables 必须来自 templateText 中出现的 {{变量值}}，按首次出现顺序去重。
+4. value 以英文字母开头，仅含英文、数字、下划线。
+5. 语义相关时必须复用 existingVariables 或 currentTemplateVariables 的 value；无匹配才创建新 value 并配中文 name。
+6. 模板中如已有变量占位（{{xxx}}、【xxx】等形式）但与系统已有变量同义时，必须改写为系统已有变量的 value。`,
     updatedAt: new Date().toISOString(),
   }];
+}
+
+function migrateDefaultPrompts(prompts) {
+  const outdatedMarkers = [
+    '只返回 JSON，格式为 {"variables"',
+    '【输出】只输出严格 JSON：{"replacements"',
+  ];
+  const latest = defaultPrompts()[0];
+  let changed = false;
+  const next = prompts.map((item) => {
+    if (item.id === latest.id && outdatedMarkers.some((marker) => String(item.content || '').includes(marker))) {
+      changed = true;
+      return { ...item, content: latest.content, updatedAt: new Date().toISOString() };
+    }
+    return item;
+  });
+  return { prompts: next, changed };
 }

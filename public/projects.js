@@ -42,6 +42,7 @@ const elements = {
   previewDropdown: $('previewDropdown'),
   valueFilter: $('valueFilter'),
   batchExport: $('batchExport'),
+  exportStatus: $('exportStatus'),
   logs: $('projectLogs'),
   toast: $('toast'),
   deleteBtn: $('deleteProject'),
@@ -675,23 +676,39 @@ elements.valueFilter.onchange = renderValueForm;
 /* ---------------------------- 导出（批量 + 单个） ---------------------------- */
 elements.batchExport.onclick = async () => {
   const ids = (state.currentProject?.templateIds || []);
-  if (!ids.length) return notice(elements.toast, '本项目无关联模板', true);
+  if (!ids.length) {
+    setExportStatus('本项目无关联模板，无法导出', true);
+    return notice(elements.toast, '本项目无关联模板', true);
+  }
+  setButtonLoading(elements.batchExport, true, '导出中...');
+  setExportStatus('正在导出全部模板...');
   notice(elements.toast, '正在批量导出...');
   try {
     const ok = await downloadFile(`/api/projects/${state.currentProject.id}/export-batch`, 'POST', { templateIds: ids, format: 'docx' });
-    if (ok) notice(elements.toast, '已开始批量导出');
+    if (ok) {
+      setExportStatus('全部模板已导出，请查看浏览器下载记录。');
+      notice(elements.toast, '已导出全部 DOCX');
+    }
   } catch (error) {
+    setExportStatus(error.message, true);
     notice(elements.toast, error.message, true);
+  } finally {
+    setButtonLoading(elements.batchExport, false);
   }
 };
 
 // 单个模板导出（在卡片上调用）
 async function exportSingleTemplate(tid) {
+  setExportStatus('正在导出单个模板...');
   notice(elements.toast, '正在导出...');
   try {
     const ok = await downloadFile(`/api/projects/${state.currentProject.id}/templates/${tid}/export`, 'POST', { format: 'docx' });
-    if (ok) notice(elements.toast, '已导出 DOCX');
+    if (ok) {
+      setExportStatus('单个模板已导出，请查看浏览器下载记录。');
+      notice(elements.toast, '已导出 DOCX');
+    }
   } catch (error) {
+    setExportStatus(error.message, true);
     notice(elements.toast, error.message, true);
   }
 }
@@ -700,13 +717,25 @@ async function exportSingleTemplate(tid) {
 async function exportGroup(groupId) {
   const g = state.groups.find((x) => x.id === groupId);
   const ids = g?.templateIds || [];
-  if (!ids.length) return notice(elements.toast, '该编组无模板', true);
+  if (!ids.length) {
+    setExportStatus('该编组无模板，无法导出', true);
+    return notice(elements.toast, '该编组无模板', true);
+  }
+  const button = elements.groupList.querySelector(`.export-group-btn[data-gid="${groupId}"]`);
+  if (button) setButtonLoading(button, true, '导出中...');
+  setExportStatus(`正在导出编组「${g.name}」...`);
   notice(elements.toast, '正在导出整组...');
   try {
     const ok = await downloadFile(`/api/projects/${state.currentProject.id}/export-batch`, 'POST', { templateIds: ids, format: 'docx' });
-    if (ok) notice(elements.toast, `已导出编组「${g.name}」`);
+    if (ok) {
+      setExportStatus(`编组「${g.name}」已导出，请查看浏览器下载记录。`);
+      notice(elements.toast, `已导出编组「${g.name}」`);
+    }
   } catch (error) {
+    setExportStatus(error.message, true);
     notice(elements.toast, error.message, true);
+  } finally {
+    if (button) setButtonLoading(button, false);
   }
 }
 
@@ -719,7 +748,9 @@ async function downloadFile(url, method, body) {
       body: JSON.stringify(body),
     });
   } catch (error) {
-    notice(elements.toast, `请求失败：${error.message}（可能是代理拦截，请检查系统代理设置对 localhost 放行）`, true);
+    const msg = `请求失败：${error.message}（可能是代理拦截，请检查系统代理设置对 localhost 放行）`;
+    setExportStatus(msg, true);
+    notice(elements.toast, msg, true);
     return false;
   }
   if (!response.ok) {
@@ -728,17 +759,33 @@ async function downloadFile(url, method, body) {
       const err = await response.json();
       if (err.message) msg = err.message;
     } catch {}
+    setExportStatus(msg, true);
     notice(elements.toast, msg, true);
     return false;
   }
   const blob = await response.blob();
   const fileName = decodeURIComponent(response.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'export');
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
+  link.href = objectUrl;
   link.download = fileName;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(link.href);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
   return true;
+}
+
+function setExportStatus(message, isError = false) {
+  if (!elements.exportStatus) return;
+  elements.exportStatus.textContent = message;
+  elements.exportStatus.classList.toggle('error', isError);
+}
+
+function setButtonLoading(button, loading, text) {
+  if (!button.dataset.label) button.dataset.label = button.textContent;
+  button.disabled = loading;
+  button.textContent = loading ? text : button.dataset.label;
 }
 
 /* ---------------------------- 项目 CRUD ---------------------------- */

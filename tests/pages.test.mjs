@@ -6,8 +6,10 @@ test('template and variable management use independent pages with template menu 
   const index = await fs.readFile('public/index.html', 'utf8');
   const templates = await fs.readFile('public/templates.html', 'utf8');
   const variables = await fs.readFile('public/variables.html', 'utf8');
+  const projects = await fs.readFile('public/projects.html', 'utf8');
 
-  assert.match(index, /http-equiv="refresh" content="0; url=\/templates\.html"/);
+  assert.match(index, /http-equiv="refresh" content="0; url=\/projects\.html"/);
+  assert.ok(projects.includes('id="exportStatus"'));
   assert.ok(templates.includes('id="templateModule"'));
   assert.ok(!templates.includes('id="variableModule"'));
   assert.ok(templates.indexOf('id="extractVariables"') < templates.indexOf('id="scanAiTools"'));
@@ -20,7 +22,7 @@ test('template and variable management use independent pages with template menu 
   assert.ok(!templates.includes('data-panel="ai"'));
   assert.ok(templates.includes('data-panel="variables"'));
   assert.ok(templates.indexOf('id="templateVariables"') < templates.indexOf('id="aiPrompt"'));
-  assert.ok(variables.includes('id="variableModule"'));
+  assert.ok(variables.includes('id="variableRows"'));
   assert.ok(!variables.includes('id="templateModule"'));
   assert.ok(templates.indexOf('/templates.html') < templates.indexOf('/variables.html'));
   assert.ok(variables.indexOf('/templates.html') < variables.indexOf('/variables.html'));
