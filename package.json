@@ -6,5 +6,8 @@
   "scripts": {
     "dev": "node src/server.mjs",
     "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "pizzip": "^3.2.0"
   }
 }

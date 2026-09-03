@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>项目管理</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <aside>
+        <div class="brand">签字页工作台</div>
+        <a href="/templates.html">模板管理</a>
+        <a href="/variables.html">变量管理</a>
+        <a class="active" href="/projects.html">项目管理</a>
+      </aside>
+      <section class="workspace">
+        <header>
+          <div>
+            <p class="eyebrow">PROJECT CENTER</p>
+            <h1>项目管理</h1>
+            <p>挂接模板、按编组录入真实值、批量导出签字页。</p>
+          </div>
+          <button id="newProject">新建项目</button>
+        </header>
+
+        <section class="toolbar">
+          <input id="projectKeyword" placeholder="搜索项目名称或项目id">
+        </section>
+
+        <section class="layout wide">
+          <section class="panel">
+            <div class="panel-title">
+              <h2>项目列表</h2>
+              <span id="projectCount">0 个项目</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>项目名称</th>
+                  <th>项目id</th>
+                  <th>模板/编组</th>
+                  <th>进度</th>
+                  <th>更新时间</th>
+                </tr>
+              </thead>
+              <tbody id="projectRows"></tbody>
+            </table>
+          </section>
+
+          <section class="panel detail">
+            <div class="panel-title">
+              <h2 id="projectDetailTitle">项目详情</h2>
+              <button id="deleteProject" class="danger">删除</button>
+            </div>
+            <div class="template-summary">
+              <span id="projectTemplateStatus">0 个模板</span>
+              <span id="projectGroupStatus">0 个编组</span>
+              <span id="projectProgressStatus">进度 0%</span>
+            </div>
+            <nav class="template-tabs">
+              <button class="active" data-tab="basic" type="button">基础信息</button>
+              <button data-tab="templates" type="button">模板挂接</button>
+              <button data-tab="groups" type="button">编组管理</button>
+              <button data-tab="values" type="button">真实值录入</button>
+              <button data-tab="export" type="button">导出中心</button>
+              <button data-tab="logs" type="button">变更日志</button>
+            </nav>
+
+            <div class="tab-panel active" data-panel="basic">
+              <form id="projectForm">
+                <label>项目名称<input name="name" required></label>
+                <label>项目id<input name="id" disabled></label>
+                <label>项目详情<textarea name="detail" placeholder="说明项目用途、关联业务"></textarea></label>
+                <label>状态<select name="status"><option value="active">启用</option><option value="inactive">停用</option></select></label>
+                <button type="submit">保存项目</button>
+              </form>
+            </div>
+
+            <div class="tab-panel" data-panel="templates">
+              <h3>挂接模板</h3>
+              <p class="hint">勾选要加入项目的模板，未勾选的不会参与生成。</p>
+              <div id="templateLinkList" class="link-list"></div>
+            </div>
+
+            <div class="tab-panel" data-panel="groups">
+              <h3>编组列表</h3>
+              <div class="button-row">
+                <input id="newGroupName" placeholder="新编组名称">
+                <button id="createGroup" type="button">新建编组</button>
+              </div>
+              <div id="groupList" class="group-list"></div>
+            </div>
+
+            <div class="tab-panel" data-panel="values">
+              <h3>录入作用域</h3>
+              <select id="valueScope">
+                <option value="">请选择编组或未编组模板</option>
+              </select>
+              <div id="valueForm" class="value-form"></div>
+              <div class="button-row">
+                <button id="saveValues" type="button">保存真实值</button>
+              </div>
+              <h3>渲染预览</h3>
+              <select id="previewTemplate" disabled>
+                <option value="">请选择模板预览</option>
+              </select>
+              <div id="renderPreview" class="preview-editor" data-placeholder="选择模板后将渲染填好真实值的签字页"></div>
+            </div>
+
+            <div class="tab-panel" data-panel="export">
+              <h3>导出中心</h3>
+              <p class="hint">勾选需要导出的模板（未填完真实值的模板将无法导出）。</p>
+              <div class="button-row">
+                <button id="selectExportAll" type="button">全选</button>
+                <button id="selectExportNone" type="button">清空</button>
+                <button id="batchExport" type="button">批量导出 DOCX</button>
+              </div>
+              <div id="exportList" class="export-list"></div>
+            </div>
+
+            <div class="tab-panel" data-panel="logs">
+              <div id="projectLogs" class="logs"></div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+    <div id="toast"></div>
+    <script src="/projects.js" type="module"></script>
+  </body>
+</html>
