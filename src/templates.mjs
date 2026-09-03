@@ -6,10 +6,10 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const operator = '模板管理员';
-const agnesConfig = {
-  baseUrl: 'https://apihub.agnes-ai.com/v1',
-  apiKey: 'sk-y5wCFC755x6j8J0TP01YKQ94YFJOprWPA2Qi2MQn4jk6aU4T',
-  model: 'agnes-2.0-flash',
+const aiConfig = {
+  baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+  apiKey: '5b71ba875b1c4fe0b192811419c614ff.HpNVsgSLf7k5YXAE',
+  model: 'glm-5.2',
 };
 
 export class TemplateStore {
@@ -137,7 +137,7 @@ export async function importTemplateDocument(store, id, file) {
   return updateTemplate(store, template.id, { document, previewText: preview.text, previewHtml: preview.html });
 }
 
-export async function analyzeTemplateVariables(store, id, input = {}, standardVariables = [], aiClient = callAgnesModel) {
+export async function analyzeTemplateVariables(store, id, input = {}, standardVariables = [], aiClient = callAiModel) {
   const template = await getTemplate(store, id);
   if (!template) throw new Error('模板不存在');
   const prompt = input.prompt || (await store.readPrompts())[0]?.content || '';
@@ -149,8 +149,8 @@ export async function analyzeTemplateVariables(store, id, input = {}, standardVa
   const previousExtractedVariables = currentTemplateVariables;
   const run = {
     id: randomUUID(),
-    tool: 'agnes',
-    model: agnesConfig.model,
+    tool: 'zhipu',
+    model: aiConfig.model,
     prompt,
     status: 'success',
     error: '',
@@ -203,6 +203,7 @@ export async function analyzeTemplateVariables(store, id, input = {}, standardVa
   const variableValues = extractDoubleBraceVariables(reportTemplateText);
   if (!variableValues.length) variableValues.push(...extractedVariables.map((item) => item.value));
   extractedVariables = alignVariables(mergeVariables(variableValues, extractedVariables), standardVariables);
+  reportTemplateText = remapVariableValues(reportTemplateText, extractedVariables);
   const previewHtml = renderHighlightedTemplate(reportTemplateText, extractedVariables, isHtml);
   const next = await updateTemplate(store, template.id, {
     previewText: isHtml ? htmlToPlainText(reportTemplateText) : reportTemplateText,
@@ -237,10 +238,10 @@ export async function restoreTemplateVariables(store, id) {
 
 export function getAiConfig() {
   return {
-    provider: 'agnes',
-    baseUrl: agnesConfig.baseUrl,
-    model: agnesConfig.model,
-    configured: Boolean(agnesConfig.apiKey),
+    provider: 'zhipu',
+    baseUrl: aiConfig.baseUrl,
+    model: aiConfig.model,
+    configured: Boolean(aiConfig.apiKey),
   };
 }
 
@@ -378,17 +379,20 @@ function parseAiReport(output, sourceText = '') {
   }
   const replacements = findReplacementsArray(parsed);
   if (Array.isArray(replacements) && replacements.length) {
-    return {
-      replacements: replacements.map((item) => {
-        const value = String(item.value || '').trim();
-        const original = String(item.original || item.source || item.text || '').trim();
-        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) throw new Error('AI 输出包含不合法变量');
-        if (!original) throw new Error('AI 输出的 replacement 缺少 original 片段');
-        return { original, name: String(item.name || value), value, valid: true, source: 'ai' };
-      }),
-      templateText: '',
-      variables: [],
-    };
+    const mapped = replacements.map((item) => ({
+      value: String(item.value || item.variableId || item.variable_id || item.id || '').trim(),
+      original: String(item.original || item.source || item.text || item.target || item.fragment || item.原文 || item.片段 || '').trim(),
+      name: String(item.name || item.label || item.变量名 || '').trim(),
+    })).filter((item) => {
+      // 跳过字段缺失或 value 不合法的项，避免一个错项连累整体提取失败
+      if (!item.original) return false;
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(item.value)) return false;
+      return true;
+    }).map((item) => ({ ...item, valid: true, source: 'ai' }));
+    if (mapped.length) {
+      return { replacements: mapped, templateText: '', variables: [] };
+    }
+    // 全部 replacement 项都失效时，回退到旧格式解析（templateText+variables）
   }
   const values = Array.isArray(parsed) ? parsed : findVariablesArray(parsed);
   const templateText = String(parsed.templateText || parsed.template || parsed.reportTemplate || '').trim()
@@ -498,17 +502,58 @@ function applyReplacements(source, replacements) {
 }
 
 function findReplacementTarget(source, original) {
-  if (!/<[^>]+>/.test(original)) {
-    return source.includes(original) ? original : '';
+  // 1. original 含标签时优先剥标签后匹配，避免整段替换吃掉模板原有标签
+  //    （如 original="<u>【张三】</u>" → 替换"【张三】" → "<u>{{value}}</u>"）
+  if (/<[^>]+>/.test(original)) {
+    const stripped = original.replace(/<[^>]+>/g, '').trim();
+    if (stripped && stripped !== original && source.includes(stripped)) return stripped;
   }
-  // 片段含 HTML 标签时按优先级降级匹配，保证模板原有标签与固定标签词不被吃掉：
-  // 1. 剥离全部标签后的纯文本整体（如“<u>【张三】</u>” → “【张三】”，<u> 原样保留）
-  // 2. 最后一个文本段（如“日期：<strong>2026年</strong>” → “2026年”，保留“日期：”与 <strong>）
-  const stripped = original.replace(/<[^>]+>/g, '').trim();
-  if (stripped && source.includes(stripped)) return stripped;
-  const textSegments = original.split(/(<[^>]+>)/).filter((segment) => !/^<[^>]+>$/.test(segment) && segment.trim());
-  const last = textSegments.at(-1)?.trim();
-  if (last && source.includes(last)) return last;
+  // 2. 完全连续匹配（仅在 original 不含标签时启用，避免 "<u>【张三】</u>" 整段替换吃掉 <u>）
+  if (!/<[^>]+>/.test(original) && source.includes(original)) return original;
+  // 3. original 跨源文里的 HTML 标签边界（如“【王五】”在源文里被 </span><span> 切断）
+  //    适用于：AI 没在 original 里写标签，但模板里值的位置被浏览器拆成多个 <span>
+  const crossTag = matchAcrossTags(source, original);
+  if (crossTag) return crossTag;
+  // 4. original 含标签时的最后一个文本段兜底（如“日期：<strong>2026年</strong>” → 替换"2026年"）
+  if (/<[^>]+>/.test(original)) {
+    const textSegments = original.split(/(<[^>]+>)/).filter((segment) => !/^<[^>]+>$/.test(segment) && segment.trim());
+    const last = textSegments.at(-1)?.trim();
+    if (last && source.includes(last)) return last;
+  }
+  return '';
+}
+
+function matchAcrossTags(source, original) {
+  // AI 给出的 original 在模板里被 HTML 标签拆散（如「【王五】」被 </span><span> 切成两半），
+  // 这里在 source 中找出「original 所有字符按序出现」的最小区间（中间允许 HTML 标签和任意被拆散的内容）。
+  // 采用宽松匹配：original 每个字符按序在 source 中都能找到（晚于前一字符），
+  // 返回 source 中从 original 第一字符到最后字符的连续区间。
+  if (!original.length) return '';
+  const firstChar = original[0];
+  const lastChar = original.at(-1);
+  let searchStart = 0;
+  while (searchStart < source.length) {
+    const firstAt = source.indexOf(firstChar, searchStart);
+    if (firstAt < 0) return '';
+    const lastAt = source.indexOf(lastChar, firstAt + 1);
+    if (lastAt < firstAt + original.length - 1) return '';
+    // 逐字符验证 original 是否在 source[firstAt..lastAt] 中按序出现
+    let cursor = firstAt + 1;
+    let valid = true;
+    for (let i = 1; i < original.length - 1; i += 1) {
+      const ch = original[i];
+      const found = source.indexOf(ch, cursor);
+      if (found < 0 || found > lastAt) {
+        valid = false;
+        break;
+      }
+      cursor = found + 1;
+    }
+    if (valid) {
+      return source.slice(firstAt, lastAt + 1);
+    }
+    searchStart = firstAt + 1;
+  }
   return '';
 }
 
@@ -618,6 +663,18 @@ function mergeVariables(variableValues, aiVariables) {
   return variableValues.map((value) => byValue.get(value) || { name: value, value, valid: true, source: 'templateText' });
 }
 
+function remapVariableValues(text, alignedVariables) {
+  // 对齐可能改变了变量 value（如把 AI 给的 issuerName 改为已有变量的 companyName），
+  // 这里把模板文本里残留的 AI 原始 value 替换为对齐后的 value，保证模板与变量列表一致
+  let result = String(text || '');
+  for (const item of alignedVariables) {
+    if (!item.originalAiValue) continue;
+    if (item.originalAiValue === item.value) continue;
+    result = result.split(`{{${item.originalAiValue}}}`).join(`{{${item.value}}}`);
+  }
+  return result;
+}
+
 function renderHighlightedTemplate(text, variables, isHtml = false) {
   const known = new Map(variables.map((item) => [item.value, item]));
   const renderChip = (_, value) => {
@@ -632,19 +689,20 @@ function renderHighlightedTemplate(text, variables, isHtml = false) {
   return escapeHtml(source).replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, renderChip).replace(/\n/g, '<br>');
 }
 
-async function callAgnesModel(content) {
-  if (!agnesConfig.apiKey) throw new Error('缺少 Agnes API Key');
+async function callAiModel(content) {
+  if (!aiConfig.apiKey) throw new Error('缺少云端 AI API Key');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
+  const timer = setTimeout(() => controller.abort(), 120000);
   try {
-    const response = await fetch(`${agnesConfig.baseUrl}/chat/completions`, {
+    const response = await fetch(`${aiConfig.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${agnesConfig.apiKey}`,
+        authorization: `Bearer ${aiConfig.apiKey}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: agnesConfig.model,
+        model: aiConfig.model,
+        thinking: { type: 'disabled' },
         messages: [
           { role: 'system', content: '你是签字页报告模板变量提取助手。必须输出严格 JSON，且必须包含 replacements 字段；replacements 中每项必须包含 original（模板原文的精确片段，不要包含 HTML 标签）、name（中文变量名）、value（英文变量值）。' },
           { role: 'user', content },
@@ -655,12 +713,12 @@ async function callAgnesModel(content) {
       signal: controller.signal,
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error?.message || `Agnes API 请求失败：${response.status}`);
+    if (!response.ok) throw new Error(body.error?.message || `云端 AI 请求失败：${response.status}`);
     const message = body.choices?.[0]?.message?.content;
-    if (!message) throw new Error('Agnes API 未返回内容');
+    if (!message) throw new Error('云端 AI 未返回内容');
     return message;
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('Agnes API 调用超时');
+    if (error.name === 'AbortError') throw new Error('云端 AI 调用超时（超过 120 秒）');
     throw error;
   } finally {
     clearTimeout(timer);
@@ -673,13 +731,19 @@ function alignVariables(extractedVariables, standardVariables) {
   const seen = new Set();
   return extractedVariables
     .map((item) => {
-      const matched = byValue.get(String(item.value).toLowerCase()) || byName.get(String(item.name).toLowerCase());
+      // 严格匹配：value 或 name 完全一致
+      let matched = byValue.get(String(item.value).toLowerCase()) || byName.get(String(item.name).toLowerCase());
+      // 语义匹配：AI 给的 name/original 与已有变量 name 包含关系或关键词重叠（含同义概念）
+      if (!matched) {
+        matched = findSemanticMatch(item, standardVariables);
+      }
       const value = matched?.value || item.value;
       const dedupKey = String(value).toLowerCase();
       if (seen.has(dedupKey)) return null;
       seen.add(dedupKey);
       return {
         ...item,
+        originalAiValue: item.value,
         name: matched?.name || item.name,
         value,
         matchStatus: matched ? 'existing' : 'new',
@@ -688,6 +752,50 @@ function alignVariables(extractedVariables, standardVariables) {
       };
     })
     .filter(Boolean);
+}
+
+function findSemanticMatch(item, standardVariables) {
+  const aiName = String(item.name || '').toLowerCase();
+  const aiOriginal = String(item.original || '').toLowerCase();
+  const candidates = [];
+  for (const std of standardVariables) {
+    const stdName = String(std.name || '').toLowerCase();
+    const stdDesc = String(std.description || '').toLowerCase();
+    let score = 0;
+    // AI 的 name 与已有 name 互相包含
+    if (aiName && stdName && (aiName.includes(stdName) || stdName.includes(aiName))) score += 3;
+    // AI 的 original 中出现已有 name 的关键词
+    if (aiOriginal && stdName) {
+      const keywords = extractKeywords(stdName);
+      const hits = keywords.filter((k) => aiOriginal.includes(k)).length;
+      if (hits) score += hits + 1;
+    }
+    // description 中包含 AI 的 name 关键词
+    if (aiName && stdDesc) {
+      const keywords = extractKeywords(aiName);
+      const hits = keywords.filter((k) => stdDesc.includes(k)).length;
+      if (hits) score += hits;
+    }
+    if (score >= 2) candidates.push({ std, score });
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].std;
+}
+
+function extractKeywords(text) {
+  // 中文按 1-2 字滑窗提取关键词，去常见停用词
+  const stop = new Set(['的', '了', '是', '在', '和', '与', '或', '及', '为', '等', '中', '上', '下']);
+  const keywords = new Set();
+  for (let i = 0; i < text.length; i += 1) {
+    const one = text[i];
+    if (!stop.has(one) && /[\u4e00-\u9fa5a-z]/i.test(one)) keywords.add(one);
+    if (i + 2 <= text.length) {
+      const two = text.slice(i, i + 2);
+      if (!stop.has(two[0]) && !stop.has(two[1])) keywords.add(two);
+    }
+  }
+  return [...keywords];
 }
 
 function buildTemplate(input, current, fallbackId) {

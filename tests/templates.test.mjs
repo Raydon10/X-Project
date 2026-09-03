@@ -16,13 +16,13 @@ import {
   updateTemplate,
 } from '../src/templates.mjs';
 
-test('cloud AI config uses Agnes without exposing the API key', () => {
+test('cloud AI config uses Zhipu GLM without exposing the API key', () => {
   const config = getAiConfig();
-  assert.equal(config.provider, 'agnes');
-  assert.equal(config.baseUrl, 'https://apihub.agnes-ai.com/v1');
-  assert.equal(config.model, 'agnes-2.0-flash');
+  assert.equal(config.provider, 'zhipu');
+  assert.equal(config.baseUrl, 'https://open.bigmodel.cn/api/paas/v4');
+  assert.equal(config.model, 'glm-5.2');
   assert.equal(config.configured, true);
-  assert.equal(JSON.stringify(config).includes('sk-'), false);
+  assert.equal(JSON.stringify(config).includes('5b71ba'), false);
 });
 
 async function withStore(run) {
@@ -401,6 +401,84 @@ test('recovers replacements from legacy templateText via anchor alignment to pre
     assert.match(updated.previewHtml, /<td>负责人：<span class="variable-chip"[^>]*data-variable="firmHead">/);
     assert.ok(updated.previewHtml.includes('</td></tr></tbody></table>'));
     assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName', 'firmHead']);
+  });
+});
+
+test('aligns AI variables to existing ones even when value/name differ but semantics overlap', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '语义对齐模板', detail: '' }, { timestamp: 20260903171500 });
+    const sourceHtml = '<p>发行人：星河科技股份有限公司</p><p>经办律师：张三</p><p>签署日期：2026年9月3日</p>';
+    await updateTemplate(store, template.id, { previewText: '发行人：星河科技', previewHtml: sourceHtml });
+
+    const updated = await analyzeTemplateVariables(store, template.id, {
+      prompt: '提取变量',
+      textOverride: '',
+      textHtml: sourceHtml,
+    }, [
+      { name: '公司名称', value: 'companyName', type: 'single', description: '公司名称' },
+      { name: '签字律师', value: 'lawyerName', type: 'single', description: '律师姓名' },
+      { name: '日期', value: 'signDate', type: 'single', description: '签署日期' },
+    ], async () => JSON.stringify({
+      replacements: [
+        { original: '星河科技股份有限公司', name: '发行人名称', value: 'issuerName' },
+        { original: '张三', name: '经办律师', value: 'lawyer' },
+        { original: '2026年9月3日', name: '签署日期', value: 'signDate' },
+      ],
+    }));
+
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName', 'lawyerName', 'signDate']);
+    assert.equal(updated.extractedVariables[0].matchStatus, 'existing');
+    assert.equal(updated.extractedVariables[1].matchStatus, 'existing');
+    assert.equal(updated.extractedVariables[2].matchStatus, 'existing');
+    assert.match(updated.previewHtml, /data-variable="companyName"/);
+    assert.match(updated.previewHtml, /data-variable="lawyerName"/);
+    assert.match(updated.previewHtml, /data-variable="signDate"/);
+  });
+});
+
+test('replaces AI originals that span across split HTML tags in the template', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '跨标签模板', detail: '' }, { timestamp: 20260903192000 });
+    const sourceHtml = '<p>经办律师：<span>【</span><span>王五】律师</span></p><p><span>年</span><span>     </span><span>月</span><span>     </span><span>日</span></p>';
+    await updateTemplate(store, template.id, { previewText: '经办律师：【王五】  年     月     日', previewHtml: sourceHtml });
+
+    const updated = await analyzeTemplateVariables(store, template.id, {
+      prompt: '提取变量',
+      textOverride: '经办律师：【王五】  年     月     日',
+      textHtml: sourceHtml,
+    }, [], async () => JSON.stringify({
+      replacements: [
+        { original: '【王五】', name: '经办律师', value: 'lawyer1' },
+        { original: '年     月     日', name: '签署日期', value: 'signDate' },
+      ],
+    }));
+
+    assert.match(updated.previewHtml, /data-variable="lawyer1">\{\{lawyer1\}\}<\/span>/);
+    assert.match(updated.previewHtml, /data-variable="signDate">\{\{signDate\}\}<\/span>/);
+    assert.ok(!updated.previewHtml.includes('【王五】'));
+    assert.ok(!updated.previewHtml.includes('王五】'));
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['lawyer1', 'signDate']);
+  });
+});
+
+test('skips invalid replacement items instead of failing the whole extraction', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '部分缺失模板', detail: '' }, { timestamp: 20260903193000 });
+    await updateTemplate(store, template.id, { previewText: '公司：星河科技\n日期：2026年9月3日' });
+
+    const updated = await analyzeTemplateVariables(store, template.id, { prompt: '提取' }, [], async () => JSON.stringify({
+      replacements: [
+        { original: '星河科技', name: '公司名称', value: 'companyName' },
+        { original: '', name: '幽灵', value: 'ghost' },                              // original 空，跳过
+        { original: '2026年9月3日', name: '签署日期' },                              // 缺 value，跳过
+        { target: '不识别的字段名', name: '错位', value: 'wrongName' },              // 不识别字段，跳过
+      ],
+    }));
+
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName']);
+    assert.match(updated.previewText, /公司：\{\{companyName\}\}/);
+    assert.ok(!updated.previewText.includes('ghost'));
+    assert.ok(!updated.previewText.includes('wrongName'));
   });
 });
 
