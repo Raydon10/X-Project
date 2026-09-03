@@ -622,7 +622,302 @@ code {
   padding: 6px 10px;
 }
 
-/* ========== 大抽屉详情面板 ========== */
+/* ========== 关联模板 弹窗式多选 ========== */
+.link-picker-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .42);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+  z-index: 60;
+}
+.link-picker-mask.show { opacity: 1; pointer-events: auto; }
+
+.link-picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(.96);
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px #1b2b5544;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.link-picker.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.link-picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e5eaf2;
+}
+
+.link-picker-head h3 { margin: 0; font-size: 16px; }
+
+.link-picker-body {
+  padding: 14px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.link-picker-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid #e5eaf2;
+  background: #f8fafc;
+}
+
+.link-picker-close {
+  border: 0;
+  background: transparent;
+  font-size: 22px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+/* ========== 卡片进度条 + 操作按钮 ========== */
+.scope-label {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+#valueFilter {
+  margin-bottom: 10px;
+}
+
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  margin-bottom: 8px;
+}
+
+.preview-toolbar button {
+  border: 1px solid #cbd5e1;
+  background: white;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.preview-toolbar button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.preview-toolbar span {
+  font-size: 13px;
+  color: #475569;
+  min-width: 50px;
+  text-align: center;
+}
+
+.preview-toolbar select {
+  flex: 1;
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
+.card-head-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-head-row strong { flex: 0 0 auto; min-width: 0; }
+
+.card-head-row .progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 0;
+}
+
+.card-head-row .progress-bar > span {
+  display: block;
+  height: 100%;
+  background: #22c55e;
+  transition: width .3s;
+}
+
+.ungrouped-item .ungrouped-item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.export-single-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.export-single-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.group-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.export-group-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.export-group-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ========== 编组与录入 双栏 ========== */
+.linked-summary {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.linked-summary-item {
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.linked-summary-item strong { color: #1f2937; }
+.linked-summary-item small { color: #64748b; display: block; margin-top: 3px; font-size: 11px; }
+
+.gv-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 1.4fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.gv-left {
+  display: grid;
+  gap: 14px;
+}
+
+.gv-right {
+  border-left: 1px solid #e5eaf2;
+  padding-left: 18px;
+  min-width: 0;
+}
+
+.gv-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gv-section-head h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+}
+
+.ungrouped-list {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f8fafc;
+  min-height: 60px;
+}
+
+.ungrouped-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+}
+
+.ungrouped-item strong { font-size: 13px; }
+.ungrouped-item small { display: block; color: #64748b; font-size: 11px; margin-top: 2px; }
+
+.ungrouped-item select {
+  width: auto;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.group-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fcfdff;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.group-card:hover { border-color: #93c5fd; }
+.group-card.selected { border-color: #3567d6; background: #eef4ff; box-shadow: 0 0 0 2px #dbeafe; }
+
+.group-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.group-card-head strong { font-size: 14px; }
+
+.group-members-list {
+  display: grid;
+  gap: 6px;
+}
+
+/* 组内模板卡片复用未编组样式，但右下角放移出按钮（不再用下拉框） */
+.ungrouped-item.grouped-item {
+  grid-template-columns: 1fr auto;
+  cursor: default;
+}
+
+.ungrouped-item.grouped-item .group-member-remove {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+@media (max-width: 900px) {
+  .gv-layout { grid-template-columns: 1fr; }
+  .gv-right { border-left: 0; padding-left: 0; border-top: 1px solid #e5eaf2; padding-top: 14px; }
+}
+
 .drawer-mask {
   position: fixed;
   inset: 0;

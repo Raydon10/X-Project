@@ -66,10 +66,8 @@
       </div>
       <nav class="template-tabs">
         <button class="active" data-tab="basic" type="button">基础信息</button>
-        <button data-tab="templates" type="button">模板挂接</button>
-        <button data-tab="groups" type="button">编组管理</button>
-        <button data-tab="values" type="button">真实值录入</button>
-        <button data-tab="export" type="button">导出中心</button>
+        <button data-tab="templates" type="button">关联模板</button>
+        <button data-tab="groups-values" type="button">编组与录入</button>
         <button data-tab="logs" type="button">变更日志</button>
       </nav>
       <div class="drawer-body">
@@ -84,45 +82,46 @@
         </div>
 
         <div class="tab-panel" data-panel="templates">
-          <h3>挂接模板</h3>
-          <p class="hint">勾选要加入项目的模板，未勾选的不会参与生成。</p>
-          <div id="templateLinkList" class="link-list"></div>
+          <h3>关联模板</h3>
+          <p class="hint">本项目已关联的模板列表，点击下方按钮进行勾选关联。</p>
+          <button type="button" id="openLinkPicker">管理关联模板</button>
+          <div id="linkedSummary" class="linked-summary"></div>
         </div>
 
-        <div class="tab-panel" data-panel="groups">
-          <h3>编组列表</h3>
-          <div class="button-row">
-            <input id="newGroupName" placeholder="新编组名称">
-            <button id="createGroup" type="button">新建编组</button>
+        <div class="tab-panel" data-panel="groups-values">
+          <div class="gv-layout">
+            <div class="gv-left">
+              <div class="gv-section-head">
+                <h3>未编组模板</h3>
+                <p class="hint">点击模板卡片选中作为录入作用域；通过卡片右侧下拉框归入编组。</p>
+              </div>
+              <div id="ungroupedList" class="ungrouped-list"></div>
+              <div class="gv-section-head">
+                <h3>编组（1-10）</h3>
+                <p class="hint">点击编组卡片整体选中作为录入作用域。</p>
+              </div>
+              <div id="groupList" class="group-list"></div>
+            </div>
+            <div class="gv-right">
+              <h3>真实值录入</h3>
+              <p class="hint">在左侧选中模板或编组后在此录入真实值，同变量在编组内只录一次即同步组内所有模板。</p>
+              <div id="valueScopeLabel" class="scope-label">当前未选中作用域</div>
+              <select id="valueFilter" style="display:none"></select>
+              <div id="valueForm" class="value-form"></div>
+              <div class="button-row">
+                <button id="saveValues" type="button" disabled>保存真实值</button>
+                <button id="batchExport" type="button" disabled>批量导出全部 DOCX</button>
+              </div>
+              <h3>渲染预览</h3>
+              <div id="previewToolbar" class="preview-toolbar" style="display:none">
+                <button type="button" id="previewPrev">‹</button>
+                <span id="previewLabel">1 / 1</span>
+                <button type="button" id="previewNext">›</button>
+                <select id="previewDropdown"></select>
+              </div>
+              <div id="renderPreview" class="preview-editor" data-placeholder="在左侧选中模板后将自动渲染填好真实值的签字页"></div>
+            </div>
           </div>
-          <div id="groupList" class="group-list"></div>
-        </div>
-
-        <div class="tab-panel" data-panel="values">
-          <h3>录入作用域</h3>
-          <select id="valueScope">
-            <option value="">请选择编组或未编组模板</option>
-          </select>
-          <div id="valueForm" class="value-form"></div>
-          <div class="button-row">
-            <button id="saveValues" type="button">保存真实值</button>
-          </div>
-          <h3>渲染预览</h3>
-          <select id="previewTemplate" disabled>
-            <option value="">请选择模板预览</option>
-          </select>
-          <div id="renderPreview" class="preview-editor" data-placeholder="选择模板后将渲染填好真实值的签字页"></div>
-        </div>
-
-        <div class="tab-panel" data-panel="export">
-          <h3>导出中心</h3>
-          <p class="hint">勾选需要导出的模板（未填完真实值的模板将无法导出）。</p>
-          <div class="button-row">
-            <button id="selectExportAll" type="button">全选</button>
-            <button id="selectExportNone" type="button">清空</button>
-            <button id="batchExport" type="button">批量导出 DOCX</button>
-          </div>
-          <div id="exportList" class="export-list"></div>
         </div>
 
         <div class="tab-panel" data-panel="logs">
@@ -130,6 +129,20 @@
         </div>
       </div>
     </aside>
+
+    <div class="link-picker-mask" id="linkPickerMask"></div>
+    <div class="link-picker" id="linkPicker">
+      <div class="link-picker-head">
+        <h3>关联模板</h3>
+        <button type="button" class="link-picker-close" id="linkPickerClose">×</button>
+      </div>
+      <div class="link-picker-body">
+        <div id="templateLinkList" class="link-list"></div>
+      </div>
+      <div class="link-picker-foot">
+        <button type="button" id="linkPickerDone">完成</button>
+      </div>
+    </div>
 
     <div id="toast"></div>
     <script src="/projects.js" type="module"></script>

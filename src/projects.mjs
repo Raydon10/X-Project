@@ -220,6 +220,12 @@ export async function createGroup(store, projectId, input) {
   const groups = await store.readGroups();
   const group = buildGroup(projectId, input, null, Date.now());
   if (groups.some((g) => g.id === group.id)) throw new Error('编组id不可重复');
+  // 校验 groupIndex 在项目内唯一（1-10 范围）
+  if (group.groupIndex) {
+    if (group.groupIndex < 1 || group.groupIndex > 10) throw new Error('编组序号只能 1-10');
+    const sameIndex = groups.filter((g) => g.projectId === project.id && (g.groupIndex || 0) === group.groupIndex);
+    if (sameIndex.length) throw new Error(`编组${group.groupIndex} 已存在`);
+  }
   await validateGroupTemplates(store, project, group, groups);
   await store.writeGroups([...groups, group]);
   await store.appendAuditLog(audit('CREATE_GROUP', group.id, `${project.name}/${group.name}`));
@@ -276,6 +282,23 @@ export async function addTemplatesToGroup(store, groupId, templateIds) {
   group.updatedAt = new Date().toISOString();
   await validateGroupTemplates(store, project, group, groups.filter((g) => g.id !== group.id));
   await store.writeGroups(groups);
+  // 把模板级真实值迁移到组级（同变量值已存在的组级值优先，不覆盖）
+  const values = await store.readValues(group.projectId);
+  const groupScope = `group:${group.id}`;
+  const existingGroupValues = new Set(values.filter((v) => v.scope === groupScope).map((v) => `${v.variableValue}:${v.slotIndex || 0}`));
+  const toAdd = [];
+  for (const tid of adds) {
+    const templateScope = `template:${tid}`;
+    for (const v of values.filter((x) => x.scope === templateScope)) {
+      const key = `${v.variableValue}:${v.slotIndex || 0}`;
+      if (existingGroupValues.has(key)) continue; // 组级已有同变量值，跳过
+      existingGroupValues.add(key);
+      toAdd.push({ ...v, scope: groupScope });
+    }
+  }
+  if (toAdd.length) {
+    await store.writeValues(group.projectId, [...values, ...toAdd]);
+  }
   await store.appendAuditLog(audit('ADD_TO_GROUP', group.id, `加入模板 ${adds.join(',')}`));
   return group;
 }
@@ -496,15 +519,16 @@ export async function renderSignaturePage(store, templateStore, projectId, templ
 /**
  * 用真实值替换模板 HTML 中的 {{var}} 占位
  * - chip 包装自动剥除
- * - enum 类变量按空格拼接多个 slot 的值
+ * - enum 类变量：当指定 enumSlot 时使用对应 slot 的值；未指定时取 slot 0
+ *   导出场景会按 slot 数量循环调用，每次传不同 enumSlot 生成多份
  */
-function renderTemplateHtml(template, resolved) {
+function renderTemplateHtml(template, resolved, enumSlot = 0) {
   let html = String(template.previewHtml || template.previewText || '');
   const vars = (template.extractedVariables || []).filter((v) => v && v.value);
   for (const v of vars) {
     const slots = resolved[v.value] || [];
-    // enum 多 slot：空格拼接所有已填值
-    const real = slots.filter(Boolean).join(' ') || '';
+    // 取指定 slot 的值；若该 slot 无值则跳过（不替换）
+    const real = slots[enumSlot] || '';
     if (!real) continue;
     // 先剥 chip 包装（<span class="variable-chip" data-status="..." data-variable="xxx">{{xxx}}</span>）
     const chipRe = new RegExp(`<span class="variable-chip"[^>]*data-variable="${escapeRegExp(v.value)}"[^>]*>\\{\\{${escapeRegExp(v.value)}\\}\\}</span>`, 'g');
@@ -519,10 +543,12 @@ function renderTemplateHtml(template, resolved) {
 
 /**
  * 导出单个签字页为 DOCX
- * 基于原始模板文档替换 {{var}} → realValue
- * @param {string} format 'docx' | 'doc'（统一走 docx）
+ * - 单一变量模板：导出 1 份 docx
+ * - 含枚举变量的模板：按枚举 slot 数量导出多份，打包为 zip
+ *   枚举 slot 数 = max(所有枚举变量的 slot 数)
+ *   非枚举变量在每份中都使用 slot 0 的值
  */
-export async function exportSingle(store, templateStore, projectId, templateId, format = 'docx') {
+export async function exportSingle(store, templateStore, projectId, templateId, format = 'docx', sysVars = []) {
   const progress = await getProgressByTemplate(store, templateStore, projectId, templateId);
   if (progress.missing.length) {
     throw new Error(`签字页 ${progress.name} 有 ${progress.missing.length} 个变量未填写真实值，无法导出`);
@@ -533,22 +559,63 @@ export async function exportSingle(store, templateStore, projectId, templateId, 
   const values = await store.readValues(projectId);
   const template = (await templateStore.readTemplates()).find((t) => t.id === Number(templateId));
   if (!template) throw new Error('模板不存在');
+
+  // 整理变量值（按 variableValue → slots 数组）
   const resolved = {};
   for (const v of values.filter((x) => x.scope === scope && x.realValue && x.realValue.trim())) {
     if (!resolved[v.variableValue]) resolved[v.variableValue] = [];
     resolved[v.variableValue][v.slotIndex || 0] = v.realValue;
   }
-  const docxBuffer = await renderDocxFromTemplate(template, resolved);
+
+  // 找出所有枚举变量，计算需展开多少份
+  const enumVarValues = new Set();
+  for (const v of (template.extractedVariables || [])) {
+    const sysVar = sysVars.find((s) => s.value === v.value);
+    if (sysVar?.type === 'enum') enumVarValues.add(v.value);
+  }
+  let enumCount = 0;
+  for (const value of enumVarValues) {
+    const slots = resolved[value] || [];
+    const cnt = slots.filter(Boolean).length;
+    if (cnt > enumCount) enumCount = cnt;
+  }
+  if (enumCount === 0) enumCount = 1; // 无枚举或多 slot，导出 1 份
+
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `${sanitizeFileName(project.name)}-${sanitizeFileName(template.name)}-${stamp}.docx`;
-  return { fileName, buffer: docxBuffer, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  // 单份直接返回 docx
+  if (enumCount === 1) {
+    const buffer = await renderDocxFromTemplate(template, resolved, 0);
+    const fileName = `${sanitizeFileName(project.name)}-${sanitizeFileName(template.name)}-${stamp}.docx`;
+    return { fileName, buffer, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  }
+
+  // 多份：按 slot 0..N-1 生成，打包 zip
+  const files = [];
+  for (let i = 0; i < enumCount; i += 1) {
+    const buffer = await renderDocxFromTemplate(template, resolved, i);
+    files.push({
+      fileName: `${sanitizeFileName(project.name)}-${sanitizeFileName(template.name)}-${i + 1}-${stamp}.docx`,
+      buffer,
+    });
+  }
+  try {
+    const zipBuffer = await makeZip(files);
+    return {
+      fileName: `${sanitizeFileName(project.name)}-${sanitizeFileName(template.name)}-${stamp}.zip`,
+      buffer: zipBuffer,
+      mime: 'application/zip',
+    };
+  } catch (error) {
+    // zip 失败回退：返回第一份 docx
+    return { ...files[0], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  }
 }
 
 /**
  * 批量导出：返回 zip 缓冲
  * @param {number[]} templateIds
  */
-export async function exportBatch(store, templateStore, projectId, templateIds, format = 'docx') {
+export async function exportBatch(store, templateStore, projectId, templateIds, format = 'docx', sysVars = []) {
   const project = await getProject(store, projectId);
   if (!project) throw new Error('项目不存在');
   const ids = (templateIds || []).map(Number).filter(Boolean);
@@ -561,7 +628,25 @@ export async function exportBatch(store, templateStore, projectId, templateIds, 
   if (failed.length) throw new Error(`以下签字页未填完，无法批量导出：${failed.join('；')}`);
   const files = [];
   for (const id of ids) {
-    files.push(await exportSingle(store, templateStore, projectId, id, format));
+    // exportSingle 内部会处理枚举多份，每份作为独立文件加入 zip
+    const result = await exportSingle(store, templateStore, projectId, id, format, sysVars);
+    if (result.mime === 'application/zip') {
+      // 单模板导出本身就是 zip（含多份枚举），解压后再合并
+      const osTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sig-export-'));
+      try {
+        await fs.writeFile(path.join(osTmpDir, 'inner.zip'), result.buffer);
+        await exec('unzip', ['-q', '-o', 'inner.zip', '-d', '.'], { cwd: osTmpDir });
+        const entries = await fs.readdir(osTmpDir);
+        for (const e of entries) {
+          if (e === 'inner.zip') continue;
+          files.push({ fileName: e, buffer: await fs.readFile(path.join(osTmpDir, e)) });
+        }
+      } finally {
+        try { await fs.rm(osTmpDir, { recursive: true, force: true }); } catch {}
+      }
+    } else {
+      files.push(result);
+    }
   }
   // 打包 zip（使用系统 zip 命令；mac/linux 内置，windows 需 7z；失败时回退为多文件下载清单）
   try {
@@ -601,59 +686,13 @@ async function makeZip(files) {
 }
 
 /**
- * 基于原始 docx 模板做 {{var}} 替换
- * docx 是 zip 包，word/document.xml 是正文
- * 我们读出 document.xml → 文本中替换 {{var}} → 写回新 zip
+ * 基于模板的 previewHtml 生成 docx
+ * previewHtml 已含 {{var}} 占位，renderTemplateHtml 替换为真实值
+ * enumSlot：枚举类变量使用哪个 slot 值（默认 0）
  */
-async function renderDocxFromTemplate(template, resolved) {
-  const doc = template.document;
-  if (!doc || !doc.storagePath) {
-    // 没有原始 docx，用 HTML → 简单 docx（一份 HTML 包装）
-    return htmlToDocx(renderTemplateHtml(template, resolved), template.name);
-  }
-  const storagePath = doc.storagePath;
-  if (!/\.docx$/i.test(storagePath)) {
-    // .doc 老格式：直接拷贝并提示无法替换
-    return htmlToDocx(renderTemplateHtml(template, resolved), template.name);
-  }
-  try {
-    const Pizzocrip = await import('pizzip');
-    const PizZip = Pizzocrip.default || Pizzocrip;
-    const fileBuffer = await fs.readFile(storagePath);
-    const zip = new PizZip(fileBuffer);
-    let documentXml = zip.file('word/document.xml').asText();
-    for (const varValue of Object.keys(resolved)) {
-      const slots = resolved[varValue] || [];
-      const real = slots.filter(Boolean).join(' ') || '';
-      if (!real) continue;
-      // 在 docx XML 中替换 {{var}}（保持 XML 转义）
-      const escaped = escapeXml(real);
-      documentXml = documentXml.split(`{{${varValue}}}`).join(escaped);
-      // docx 中变量可能被分散在多个 <w:t> 中（run 拆分），尝试用宽松匹配合并
-      documentXml = mergeSplitVariable(documentXml, varValue, escaped);
-    }
-    zip.file('word/document.xml', documentXml);
-    return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-  } catch (error) {
-    // pizzip 未安装或失败 → 回退到 HTML 包装
-    return htmlToDocx(renderTemplateHtml(template, resolved), template.name);
-  }
-}
-
-/**
- * 处理 docx 中变量被拆分到多个 run 的情况
- * 如 <w:r><w:t>公司</w:t></w:r><w:r><w:t>Name</w:t></w:r><w:r><w:t>}}</w:t></w:r>
- * 用正则贪心匹配 {{var}} 跨多个 w:t 的情况
- */
-function mergeSplitVariable(xml, varValue, replacement) {
-  // 匹配 {{ 之后到 }} 之间被 </w:t>...<w:t...> 切断的情况
-  // 简单实现：找 {{varValue}} 中的字符序列在多个 w:t 中的拆分
-  // 由于复杂度高，这里只处理最常见的：{{ 和 }} 被拆到相邻 w:t
-  const pattern = new RegExp(
-    `\\{\\{(</w:t>\\s*<w:t[^>]*>)?${escapeRegExp(varValue)}(</w:t>\\s*<w:t[^>]*>)?\\}\\}`,
-    'g'
-  );
-  return xml.replace(pattern, escapeXml(replacement));
+async function renderDocxFromTemplate(template, resolved, enumSlot = 0) {
+  const html = renderTemplateHtml(template, resolved, enumSlot);
+  return htmlToDocx(html, template.name);
 }
 
 function escapeXml(text) {
@@ -719,6 +758,7 @@ function buildGroup(projectId, input, current = null, fallbackId = null) {
     id: Number(input.id || fallbackId),
     projectId: Number(projectId),
     name: String(input.name || '').trim(),
+    groupIndex: Number(input.groupIndex) || current?.groupIndex || 0,
     templateIds: Array.isArray(input.templateIds) ? [...new Set(input.templateIds.map(Number))] : (current?.templateIds || []),
     createdAt: current?.createdAt || timestamp,
     updatedAt: timestamp,

@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { TemplateStore, createTemplate } from '../src/templates.mjs';
+import { VariableStore, createVariable, listVariables } from '../src/variables.mjs';
 import {
   ProjectStore,
   createProject, getProject, listProjects, updateProject, deleteProject,
@@ -23,9 +24,11 @@ async function withStores(run) {
   try {
     const projectStore = new ProjectStore(directory);
     const templateStore = new TemplateStore(directory);
+    const variableStore = new VariableStore(directory);
     await projectStore.initialize();
     await templateStore.initialize();
-    await run({ projectStore, templateStore, nextId });
+    await variableStore.initialize();
+    await run({ projectStore, templateStore, variableStore, nextId });
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
@@ -155,17 +158,24 @@ test('ungrouped templates need their own values', async () => {
   });
 });
 
-test('enum variable uses spaces to join multiple slots', async () => {
-  await withStores(async ({ projectStore, templateStore, nextId }) => {
+test('enum variable preview uses slot 0 only, export expands to multiple files', async () => {
+  await withStores(async ({ projectStore, templateStore, variableStore, nextId }) => {
+    // 建一个枚举型系统变量
+    await createVariable(variableStore, { name: '股东', value: 'shareholder', type: 'enum' });
+    const sysVars = await listVariables(variableStore);
     const t1 = await makeTemplate(templateStore, 'T1', [{ name: '股东', value: 'shareholder' }], nextId);
     const project = await createProject(projectStore, { name: 'P', detail: '' });
     await linkTemplates(projectStore, project.id, [t1.id]);
     await setValue(projectStore, project.id, { templateId: t1.id, variableValue: 'shareholder', slotIndex: 0, realValue: '张三' });
     await setValue(projectStore, project.id, { templateId: t1.id, variableValue: 'shareholder', slotIndex: 1, realValue: '李四' });
     const rendered = await renderSignaturePage(projectStore, templateStore, project.id, t1.id);
-    // 多 slot 用空格拼接
-    assert.ok(rendered.html.includes('张三'), '渲染结果应包含张三');
-    assert.ok(rendered.html.includes('李四'), '渲染结果应包含李四');
+    // 预览只用 slot 0
+    assert.ok(rendered.html.includes('张三'), '预览应包含 slot 0 的张三');
+    assert.ok(!rendered.html.includes('李四'), '预览不应包含 slot 1 的李四');
+    // 导出：枚举有 2 个 slot，应生成 zip（含 2 份 docx）
+    const result = await exportSingle(projectStore, templateStore, project.id, t1.id, 'docx', sysVars);
+    assert.equal(result.mime, 'application/zip', '2 个枚举 slot 应打包为 zip');
+    assert.ok(result.fileName.endsWith('.zip'));
   });
 });
 

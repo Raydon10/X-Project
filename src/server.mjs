@@ -212,7 +212,12 @@ async function serveStatic(response, pathname) {
   if (!filePath.startsWith(publicDir)) return sendJson(response, 403, { message: 'Forbidden' });
   try {
     const content = await fs.readFile(filePath);
-    response.writeHead(200, { 'content-type': contentType(filePath) });
+    response.writeHead(200, {
+      'content-type': contentType(filePath),
+      'cache-control': 'no-cache, no-store, must-revalidate',
+      'pragma': 'no-cache',
+      'expires': '0',
+    });
     response.end(content);
   } catch {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -290,8 +295,8 @@ async function handleProjects(request, response, url) {
     return;
   }
 
-  // 模板挂接
-  if (action === 'templates' && request.method === 'POST') {
+  // 模板挂接（仅当 action=templates 且无 tid 时匹配，避免与 export-batch 等子路由冲突）
+  if (action === 'templates' && !tid && request.method === 'POST') {
     const body = await readBody(request);
     sendJson(response, 200, await linkTemplates(projectStore, id, body.templateIds));
     return;
@@ -353,7 +358,8 @@ async function handleProjects(request, response, url) {
     }
     if (sub === 'export' && request.method === 'POST') {
       const body = await readBody(request);
-      const result = await exportSingle(projectStore, templateStore, id, tid, body.format || 'docx');
+      const sysVars = await listVariables(variableStore);
+      const result = await exportSingle(projectStore, templateStore, id, tid, body.format || 'docx', sysVars);
       sendBinary(response, result);
       return;
     }
@@ -362,7 +368,8 @@ async function handleProjects(request, response, url) {
   // 批量导出
   if (action === 'export-batch' && request.method === 'POST') {
     const body = await readBody(request);
-    const result = await exportBatch(projectStore, templateStore, id, body.templateIds, body.format || 'docx');
+    const sysVars = await listVariables(variableStore);
+    const result = await exportBatch(projectStore, templateStore, id, body.templateIds, body.format || 'docx', sysVars);
     sendBinary(response, result);
     return;
   }
