@@ -10,17 +10,46 @@ import {
   updateVariable,
   VariableStore,
 } from './variables.mjs';
+import {
+  analyzeTemplateVariables,
+  createTemplate,
+  deleteTemplate,
+  getTemplate,
+  importTemplateDocument,
+  getAiConfig,
+  listTemplatePrompts,
+  listTemplates,
+  restoreTemplateVariables,
+  saveTemplatePrompt,
+  TemplateStore,
+  updateTemplate,
+} from './templates.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const publicDir = path.join(root, 'public');
-const store = new VariableStore(path.join(root, 'workspace'));
-await store.initialize();
+const workspaceRoot = path.join(root, 'workspace');
+const variableStore = new VariableStore(workspaceRoot);
+const templateStore = new TemplateStore(workspaceRoot);
+await variableStore.initialize();
+await templateStore.initialize();
 
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url || '/', 'http://localhost:5173');
     if (url.pathname.startsWith('/api/variables')) {
       await handleVariables(request, response, url);
+      return;
+    }
+    if (url.pathname.startsWith('/api/templates')) {
+      await handleTemplates(request, response, url);
+      return;
+    }
+    if (url.pathname.startsWith('/api/ai-tools')) {
+      sendJson(response, 200, getAiConfig());
+      return;
+    }
+    if (url.pathname.startsWith('/api/template-prompts')) {
+      await handlePrompts(request, response, url);
       return;
     }
     await serveStatic(response, url.pathname);
@@ -30,36 +59,93 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(5173, () => {
-  console.log('Variable management module running on http://localhost:5173');
+  console.log('Signature config modules running on http://localhost:5173');
 });
 
 async function handleVariables(request, response, url) {
   const parts = url.pathname.split('/').filter(Boolean);
   const value = decodeURIComponent(parts[2] || '');
   if (request.method === 'GET' && !value) {
-    sendJson(response, 200, await listVariables(store, {
+    sendJson(response, 200, await listVariables(variableStore, {
       keyword: url.searchParams.get('keyword') || '',
       type: url.searchParams.get('type') || '',
     }));
     return;
   }
   if (request.method === 'POST' && !value) {
-    sendJson(response, 201, await createVariable(store, await readBody(request)));
+    sendJson(response, 201, await createVariable(variableStore, await readBody(request)));
     return;
   }
   if (request.method === 'GET' && value) {
-    const variable = await getVariable(store, value);
+    const variable = await getVariable(variableStore, value);
     if (!variable) return sendJson(response, 404, { message: '变量不存在' });
     sendJson(response, 200, variable);
     return;
   }
   if (request.method === 'PUT' && value) {
-    sendJson(response, 200, await updateVariable(store, value, await readBody(request)));
+    sendJson(response, 200, await updateVariable(variableStore, value, await readBody(request)));
     return;
   }
   if (request.method === 'DELETE' && value) {
-    await deleteVariable(store, value);
+    await deleteVariable(variableStore, value);
     sendJson(response, 204, null);
+    return;
+  }
+  sendJson(response, 405, { message: '不支持的请求方法' });
+}
+
+async function handleTemplates(request, response, url) {
+  const parts = url.pathname.split('/').filter(Boolean);
+  const id = parts[2] || '';
+  const action = parts[3] || '';
+  if (request.method === 'GET' && !id) {
+    sendJson(response, 200, await listTemplates(templateStore, { keyword: url.searchParams.get('keyword') || '' }));
+    return;
+  }
+  if (request.method === 'POST' && !id) {
+    sendJson(response, 201, await createTemplate(templateStore, await readBody(request)));
+    return;
+  }
+  if (request.method === 'GET' && id && !action) {
+    const template = await getTemplate(templateStore, id);
+    if (!template) return sendJson(response, 404, { message: '模板不存在' });
+    sendJson(response, 200, template);
+    return;
+  }
+  if (request.method === 'PUT' && id && !action) {
+    sendJson(response, 200, await updateTemplate(templateStore, id, await readBody(request)));
+    return;
+  }
+  if (request.method === 'DELETE' && id && !action) {
+    await deleteTemplate(templateStore, id);
+    sendJson(response, 204, null);
+    return;
+  }
+  if (request.method === 'POST' && id && action === 'import') {
+    const file = await readMultipartFile(request);
+    sendJson(response, 200, await importTemplateDocument(templateStore, id, file));
+    return;
+  }
+  if (request.method === 'POST' && id && action === 'extract-variables') {
+    sendJson(response, 200, await analyzeTemplateVariables(templateStore, id, await readBody(request), await listVariables(variableStore)));
+    return;
+  }
+  if (request.method === 'POST' && id && action === 'restore-variables') {
+    sendJson(response, 200, await restoreTemplateVariables(templateStore, id));
+    return;
+  }
+  sendJson(response, 405, { message: '不支持的请求方法' });
+}
+
+async function handlePrompts(request, response, url) {
+  const id = decodeURIComponent(url.pathname.split('/').filter(Boolean)[1] || '');
+  if (request.method === 'GET') {
+    sendJson(response, 200, await listTemplatePrompts(templateStore));
+    return;
+  }
+  if (request.method === 'PUT' && id) {
+    const body = await readBody(request);
+    sendJson(response, 200, await saveTemplatePrompt(templateStore, id, body.content));
     return;
   }
   sendJson(response, 405, { message: '不支持的请求方法' });
@@ -69,6 +155,29 @@ async function readBody(request) {
   let text = '';
   for await (const chunk of request) text += chunk;
   return text ? JSON.parse(text) : {};
+}
+
+async function readMultipartFile(request) {
+  const contentType = request.headers['content-type'] || '';
+  const boundary = String(contentType).match(/boundary=(.+)$/)?.[1];
+  if (!boundary) throw new Error('缺少上传边界');
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  const body = Buffer.concat(chunks);
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  const start = body.indexOf(Buffer.from('\r\n\r\n'));
+  if (start < 0) throw new Error('上传文件格式错误');
+  const header = body.subarray(0, start).toString('utf8');
+  const fileName = header.match(/filename="([^"]+)"/)?.[1];
+  if (!fileName) throw new Error('请选择模板文件');
+  const contentStart = start + 4;
+  const nextBoundary = body.indexOf(boundaryBuffer, contentStart);
+  const contentEnd = nextBoundary > contentStart ? nextBoundary - 2 : body.length;
+  return {
+    fileName,
+    contentType: header.match(/Content-Type:\s*([^\r\n]+)/i)?.[1] || '',
+    buffer: body.subarray(contentStart, contentEnd),
+  };
 }
 
 function sendJson(response, statusCode, body) {
