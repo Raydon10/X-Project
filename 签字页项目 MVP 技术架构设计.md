@@ -1336,3 +1336,59 @@ AI标准变量匹配
 - 工作台
 - Demo预置数据
 - 异常场景演示
+
+---
+
+# 19. 模块化页面与服务分层落地
+
+最新实现需要避免把所有能力压在一个演示页内。MVP 前端按照本地 ToB 后台系统组织：
+
+```text
+顶部栏：当前项目 / 当前角色 / 全局状态
+左侧菜单：工作台 / 项目管理 / 模板中心 / 变量管理 / 项目数据 / 生成任务 / 审核交付 / 审计日志
+内容区：列表页 + 详情或操作区
+```
+
+角色仍然是单账号内直接切换，但角色会影响：
+
+- 左侧可见模块；
+- 页面按钮可用性；
+- 后端写操作权限；
+- 审计日志中的操作者角色。
+
+后端按照以下边界组织：
+
+| 层级 | 职责 |
+|---|---|
+| Route | HTTP 入参、文件上传、权限校验、响应格式 |
+| Service | 项目、模板、变量、数据、校验、生成、审核、AI、审计等业务动作 |
+| Store | 分目录文件读写、原子保存、单进程写队列 |
+| Domain | 类型、权限矩阵、菜单矩阵、校验规则 |
+| AI | CLI 输出解析、结构化结果校验 |
+
+当前接口以模块化 REST API 为主，同时保留少量旧接口兼容演示入口。新增核心接口包括：
+
+```text
+GET/POST /api/projects
+GET/PATCH /api/projects/:projectId
+GET/POST/PATCH /api/variables
+GET/POST /api/templates
+POST /api/templates/:templateId/versions
+POST /api/templates/:templateId/analyze-variables
+POST /api/templates/:templateId/confirm-variables
+GET/POST/PATCH /api/projects/:projectId/participants
+POST /api/projects/:projectId/imports/preview
+POST /api/projects/:projectId/imports/confirm
+POST /api/projects/:projectId/preflight
+GET/POST /api/projects/:projectId/generation-tasks
+GET /api/generation-tasks/:taskId
+POST /api/results/:resultId/retry
+GET/POST /api/reviews
+POST /api/reviews/:reviewId/decision
+GET /api/exports/:taskId
+GET /api/audit
+GET /api/ai/tools
+GET /api/ai/runs
+```
+
+这一层补充的目的不是扩大 MVP 范围，而是让演示更接近产品方案中的真实信息架构：用户可以看到模块、列表、详情、状态和异常，而不是只看到单个流程面板。

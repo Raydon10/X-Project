@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>变量管理</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <aside>
+        <div class="brand">签字页工作台</div>
+        <button class="active">变量管理</button>
+      </aside>
+      <section class="workspace">
+        <header>
+          <div>
+            <p class="eyebrow">VARIABLE CENTER</p>
+            <h1>变量管理</h1>
+            <p>维护标准变量，供模板绑定、项目数据录入和后续批量生成使用。</p>
+          </div>
+          <button id="newVariable">新建变量</button>
+        </header>
+
+        <section class="toolbar">
+          <input id="keyword" placeholder="搜索变量名或变量值">
+          <select id="typeFilter">
+            <option value="">全部类型</option>
+            <option value="single">单一</option>
+            <option value="enum">枚举</option>
+          </select>
+        </section>
+
+        <section class="layout">
+          <section class="panel">
+            <div class="panel-title">
+              <h2>变量列表</h2>
+              <span id="count">0 个变量</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>变量名</th>
+                  <th>变量值</th>
+                  <th>变量类型</th>
+                  <th>更新时间</th>
+                </tr>
+              </thead>
+              <tbody id="variableRows"></tbody>
+            </table>
+          </section>
+
+          <section class="panel detail">
+            <div class="panel-title">
+              <h2 id="detailTitle">变量详情</h2>
+              <button id="deleteVariable" class="danger">删除</button>
+            </div>
+            <form id="variableForm">
+              <label>变量名<input name="name" required></label>
+              <label>变量值<input name="value" required pattern="[A-Za-z][A-Za-z0-9_]*"></label>
+              <label>变量类型<select name="type"><option value="single">单一：每个项目只录入一个值</option><option value="enum">枚举：项目录入时可录入多条</option></select></label>
+              <label>描述<textarea name="description" placeholder="说明变量用途"></textarea></label>
+              <label>状态<select name="status"><option value="active">启用</option><option value="inactive">停用</option></select></label>
+              <button type="submit">保存变量</button>
+            </form>
+            <h3>变更日志</h3>
+            <div id="changeLogs" class="logs"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+    <div id="toast"></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
