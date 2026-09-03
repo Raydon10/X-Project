@@ -255,7 +255,7 @@ function renderUngroupedList() {
         <small>${tid} · ${varCount} 个变量 · ${filled}/${total} 已填</small>
       </div>
       <div class="ungrouped-item-actions">
-        <button type="button" class="export-single-btn" data-tid="${tid}" ${complete ? '' : 'disabled'} title="${complete ? '导出此模板' : '未填完无法导出'}">导出</button>
+        <button type="button" class="export-single-btn" data-tid="${tid}" title="导出此模板（未填完的会提示）">导出</button>
         <select class="ungrouped-to-group">
           <option value="">归入编组...</option>
           ${groupOptions}
@@ -349,7 +349,7 @@ function renderGroupList() {
           <span class="progress-bar"><span style="width:${gPct}%"></span></span>
         </div>
         <div class="group-card-actions">
-          <button type="button" class="export-group-btn" data-gid="${g.id}" ${gComplete ? '' : 'disabled'} title="${gComplete ? '导出整组' : '未填完无法导出'}">导出整组</button>
+          <button type="button" class="export-group-btn" data-gid="${g.id}" title="导出整组（未填完的会提示）">导出整组</button>
           <button type="button" class="group-member-remove-all danger" data-gid="${g.id}">解散组</button>
         </div>
       </div>
@@ -446,8 +446,8 @@ function renderValueScope() {
 }
 
 function renderBatchExport() {
-  const total = state.currentProject?.templateIds?.length || 0;
-  elements.batchExport.disabled = !total;
+  // 始终可点击，未填完时由后端校验返回错误提示
+  elements.batchExport.disabled = false;
 }
 
 function getCurrentScopeVariables() {
@@ -676,9 +676,10 @@ elements.valueFilter.onchange = renderValueForm;
 elements.batchExport.onclick = async () => {
   const ids = (state.currentProject?.templateIds || []);
   if (!ids.length) return notice(elements.toast, '本项目无关联模板', true);
+  notice(elements.toast, '正在批量导出...');
   try {
-    await downloadFile(`/api/projects/${state.currentProject.id}/export-batch`, 'POST', { templateIds: ids, format: 'docx' });
-    notice(elements.toast, '已开始批量导出');
+    const ok = await downloadFile(`/api/projects/${state.currentProject.id}/export-batch`, 'POST', { templateIds: ids, format: 'docx' });
+    if (ok) notice(elements.toast, '已开始批量导出');
   } catch (error) {
     notice(elements.toast, error.message, true);
   }
@@ -686,9 +687,10 @@ elements.batchExport.onclick = async () => {
 
 // 单个模板导出（在卡片上调用）
 async function exportSingleTemplate(tid) {
+  notice(elements.toast, '正在导出...');
   try {
-    await downloadFile(`/api/projects/${state.currentProject.id}/templates/${tid}/export`, 'POST', { format: 'docx' });
-    notice(elements.toast, '已导出 DOCX');
+    const ok = await downloadFile(`/api/projects/${state.currentProject.id}/templates/${tid}/export`, 'POST', { format: 'docx' });
+    if (ok) notice(elements.toast, '已导出 DOCX');
   } catch (error) {
     notice(elements.toast, error.message, true);
   }
@@ -699,24 +701,35 @@ async function exportGroup(groupId) {
   const g = state.groups.find((x) => x.id === groupId);
   const ids = g?.templateIds || [];
   if (!ids.length) return notice(elements.toast, '该编组无模板', true);
+  notice(elements.toast, '正在导出整组...');
   try {
-    await downloadFile(`/api/projects/${state.currentProject.id}/export-batch`, 'POST', { templateIds: ids, format: 'docx' });
-    notice(elements.toast, `已导出编组「${g.name}」`);
+    const ok = await downloadFile(`/api/projects/${state.currentProject.id}/export-batch`, 'POST', { templateIds: ids, format: 'docx' });
+    if (ok) notice(elements.toast, `已导出编组「${g.name}」`);
   } catch (error) {
     notice(elements.toast, error.message, true);
   }
 }
 
 async function downloadFile(url, method, body) {
-  const response = await fetch(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    notice(elements.toast, `请求失败：${error.message}（可能是代理拦截，请检查系统代理设置对 localhost 放行）`, true);
+    return false;
+  }
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    notice(elements.toast, err.message || `导出失败：${response.status}`, true);
-    return;
+    let msg = `导出失败：${response.status}`;
+    try {
+      const err = await response.json();
+      if (err.message) msg = err.message;
+    } catch {}
+    notice(elements.toast, msg, true);
+    return false;
   }
   const blob = await response.blob();
   const fileName = decodeURIComponent(response.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'export');
@@ -725,6 +738,7 @@ async function downloadFile(url, method, body) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(link.href);
+  return true;
 }
 
 /* ---------------------------- 项目 CRUD ---------------------------- */

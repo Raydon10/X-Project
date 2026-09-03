@@ -519,16 +519,16 @@ export async function renderSignaturePage(store, templateStore, projectId, templ
 /**
  * 用真实值替换模板 HTML 中的 {{var}} 占位
  * - chip 包装自动剥除
- * - enum 类变量：当指定 enumSlot 时使用对应 slot 的值；未指定时取 slot 0
- *   导出场景会按 slot 数量循环调用，每次传不同 enumSlot 生成多份
+ * - enum 类变量（在 enumVarValues 中）：按 enumSlot 取对应 slot 的值
+ * - 非 enum 变量：恒取 slot 0 的值（每份文档都相同）
  */
-function renderTemplateHtml(template, resolved, enumSlot = 0) {
+function renderTemplateHtml(template, resolved, enumSlot = 0, enumVarValues = new Set()) {
   let html = String(template.previewHtml || template.previewText || '');
   const vars = (template.extractedVariables || []).filter((v) => v && v.value);
   for (const v of vars) {
     const slots = resolved[v.value] || [];
-    // 取指定 slot 的值；若该 slot 无值则跳过（不替换）
-    const real = slots[enumSlot] || '';
+    // 枚举变量按 enumSlot 取；非枚举变量恒取 slot 0
+    const real = enumVarValues.has(v.value) ? (slots[enumSlot] || '') : (slots[0] || '');
     if (!real) continue;
     // 先剥 chip 包装（<span class="variable-chip" data-status="..." data-variable="xxx">{{xxx}}</span>）
     const chipRe = new RegExp(`<span class="variable-chip"[^>]*data-variable="${escapeRegExp(v.value)}"[^>]*>\\{\\{${escapeRegExp(v.value)}\\}\\}</span>`, 'g');
@@ -584,7 +584,7 @@ export async function exportSingle(store, templateStore, projectId, templateId, 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   // 单份直接返回 docx
   if (enumCount === 1) {
-    const buffer = await renderDocxFromTemplate(template, resolved, 0);
+    const buffer = await renderDocxFromTemplate(template, resolved, 0, enumVarValues);
     const fileName = `${sanitizeFileName(project.name)}-${sanitizeFileName(template.name)}-${stamp}.docx`;
     return { fileName, buffer, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
   }
@@ -592,7 +592,7 @@ export async function exportSingle(store, templateStore, projectId, templateId, 
   // 多份：按 slot 0..N-1 生成，打包 zip
   const files = [];
   for (let i = 0; i < enumCount; i += 1) {
-    const buffer = await renderDocxFromTemplate(template, resolved, i);
+    const buffer = await renderDocxFromTemplate(template, resolved, i, enumVarValues);
     files.push({
       fileName: `${sanitizeFileName(project.name)}-${sanitizeFileName(template.name)}-${i + 1}-${stamp}.docx`,
       buffer,
@@ -689,9 +689,10 @@ async function makeZip(files) {
  * 基于模板的 previewHtml 生成 docx
  * previewHtml 已含 {{var}} 占位，renderTemplateHtml 替换为真实值
  * enumSlot：枚举类变量使用哪个 slot 值（默认 0）
+ * enumVarValues：哪些变量是枚举型（按 slot 展开），非枚举变量恒用 slot 0
  */
-async function renderDocxFromTemplate(template, resolved, enumSlot = 0) {
-  const html = renderTemplateHtml(template, resolved, enumSlot);
+async function renderDocxFromTemplate(template, resolved, enumSlot = 0, enumVarValues = new Set()) {
+  const html = renderTemplateHtml(template, resolved, enumSlot, enumVarValues);
   return htmlToDocx(html, template.name);
 }
 

@@ -405,6 +405,22 @@ code {
   font-size: 12px;
 }
 
+.token-list .var-remove {
+  border: 0;
+  background: transparent;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: 2px;
+}
+
+.token-list .var-remove:hover {
+  color: #991b1b;
+  font-weight: 700;
+}
+
 .token-list span.new-token {
   background: #fff7ed;
   color: #9a3412;
@@ -783,8 +799,6 @@ code {
   white-space: nowrap;
 }
 
-.export-single-btn:disabled { opacity: .45; cursor: not-allowed; }
-
 .group-card-actions {
   display: flex;
   gap: 6px;
@@ -795,8 +809,6 @@ code {
   padding: 4px 10px;
   white-space: nowrap;
 }
-
-.export-group-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ========== 编组与录入 双栏 ========== */
 .linked-summary {

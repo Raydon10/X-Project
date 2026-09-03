@@ -102,13 +102,34 @@ function selectTemplate(template) {
   documentStatus.textContent = template?.document ? `已导入：${template.document.fileName}` : '未导入模板';
   variableStatus.textContent = `${template?.extractedVariables?.length || 0} 个变量`;
   extractedVariables.innerHTML = template?.extractedVariables?.length
-    ? template.extractedVariables.map((item) => `
+    ? template.extractedVariables.map((item, index) => `
       <span class="${item.matchStatus === 'new' ? 'new-token' : ''}">
         ${escapeHtml(item.name)} <code>${escapeHtml(item.value)}</code>
         ${item.matchStatus === 'existing' ? '已对齐已有变量' : '需创建变量'}
+        <button type="button" class="var-remove" data-index="${index}" title="删除该变量">×</button>
       </span>
     `).join('')
     : '<p class="empty">暂无提取变量</p>';
+  for (const btn of extractedVariables.querySelectorAll('.var-remove')) {
+    btn.onclick = async () => {
+      const idx = Number(btn.dataset.index);
+      const current = templates.find((t) => String(t.id) === String(selectedTemplateId));
+      if (!current) return;
+      const next = (current.extractedVariables || []).filter((_, i) => i !== idx);
+      try {
+        const saved = await request(`/api/templates/${selectedTemplateId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ extractedVariables: next }),
+        });
+        notice(toast, '已删除变量');
+        await loadTemplates();
+        selectedTemplateId = saved.id;
+        selectTemplate(saved);
+      } catch (error) {
+        notice(toast, error.message, true);
+      }
+    };
+  }
   templateLogs.innerHTML = renderLogs(template?.changeLogs);
   renderAiDebug(template?.aiDebug);
 }

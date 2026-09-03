@@ -10,7 +10,7 @@ export async function request(url, options = {}) {
 export function notice(toast, message, error = false) {
   toast.textContent = message;
   toast.className = error ? 'error show' : 'show';
-  setTimeout(() => toast.className = '', 1800);
+  setTimeout(() => toast.className = '', 3000);
 }
 
 export function renderLogs(logs = []) {
