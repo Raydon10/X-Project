@@ -141,8 +141,12 @@ export async function analyzeTemplateVariables(store, id, input = {}, standardVa
   const template = await getTemplate(store, id);
   if (!template) throw new Error('模板不存在');
   const prompt = input.prompt || (await store.readPrompts())[0]?.content || '';
-  const text = input.textOverride || template.previewText || template.detail || '';
-  const previousExtractedVariables = template.extractedVariables || [];
+  const sourceText = input.textOverride || template.previewText || template.detail || '';
+  const sourceHtml = normalizePreviewHtml(input.textHtml || template.previewHtml || '');
+  const isHtml = hasHtmlMarkup(sourceHtml);
+  const templateContent = isHtml ? sourceHtml : sourceText;
+  const currentTemplateVariables = template.extractedVariables || [];
+  const previousExtractedVariables = currentTemplateVariables;
   const run = {
     id: randomUUID(),
     tool: 'agnes',
@@ -154,31 +158,66 @@ export async function analyzeTemplateVariables(store, id, input = {}, standardVa
   };
   let extractedVariables = [];
   let reportTemplateText = '';
+  let aiInputText = '';
+  let aiOutputText = '';
   try {
-    const output = await aiClient(buildAiInput(prompt, standardVariables, text));
-    const report = parseAiReport(output, text);
-    reportTemplateText = completeTemplateText(report.templateText, prompt, standardVariables);
-    extractedVariables = report.variables;
+    aiInputText = buildAiInput(prompt, standardVariables, currentTemplateVariables, templateContent);
+    aiOutputText = await aiClient(aiInputText);
+    const report = parseAiReport(aiOutputText, templateContent);
+    if (report.replacements?.length) {
+      const applied = applyReplacements(templateContent, report.replacements);
+      reportTemplateText = applied.text;
+      extractedVariables = applied.items.map((item) => ({ name: item.name, value: item.value, valid: true, source: 'ai' }));
+    } else if (report.templateText.trim() !== String(templateContent || '').trim()) {
+      // AI 返回了重写全文（旧格式）：按占位符前后锚点对齐推断片段映射，回到原始模板上替换以保留格式
+      const nameByValue = new Map(report.variables.map((item) => [item.value, item.name]));
+      const derived = deriveReplacementsFromText(templateContent, report.templateText)
+        .map((item) => ({ ...item, name: nameByValue.get(item.value) || item.name }));
+      const applied = applyReplacements(templateContent, derived);
+      if (applied.items.length) {
+        reportTemplateText = applied.text;
+        extractedVariables = applied.items.map((item) => ({ name: item.name, value: item.value, valid: true, source: 'ai' }));
+      } else {
+        reportTemplateText = report.templateText;
+        extractedVariables = report.variables;
+      }
+    } else {
+      reportTemplateText = report.templateText;
+      extractedVariables = report.variables;
+    }
+    reportTemplateText = completeTemplateText(reportTemplateText, prompt, standardVariables);
   } catch (error) {
     run.status = 'failed';
     run.error = error instanceof Error ? error.message : 'AI 提取失败';
     await updateTemplate(store, template.id, {
       aiRuns: [...(template.aiRuns || []), { ...run, extractedCount: 0 }],
+      aiDebug: {
+        input: aiInputText,
+        output: aiOutputText,
+        error: run.error,
+        createdAt: new Date().toISOString(),
+      },
     });
     throw new Error(`AI 提取失败：${run.error}`);
   }
   const variableValues = extractDoubleBraceVariables(reportTemplateText);
   if (!variableValues.length) variableValues.push(...extractedVariables.map((item) => item.value));
   extractedVariables = alignVariables(mergeVariables(variableValues, extractedVariables), standardVariables);
-  const previewHtml = renderHighlightedTemplate(reportTemplateText, extractedVariables);
+  const previewHtml = renderHighlightedTemplate(reportTemplateText, extractedVariables, isHtml);
   const next = await updateTemplate(store, template.id, {
-    previewText: reportTemplateText,
+    previewText: isHtml ? htmlToPlainText(reportTemplateText) : reportTemplateText,
     previewHtml,
     extractedVariables,
     previousExtractedVariables,
     previousPreviewText: template.previewText || '',
     previousPreviewHtml: template.previewHtml || '',
     aiRuns: [...(template.aiRuns || []), { ...run, extractedCount: extractedVariables.length }],
+    aiDebug: {
+      input: aiInputText,
+      output: aiOutputText,
+      error: '',
+      createdAt: new Date().toISOString(),
+    },
   });
   return next;
 }
@@ -337,6 +376,20 @@ function parseAiReport(output, sourceText = '') {
   } catch {
     throw new Error('AI 返回内容不是合法 JSON');
   }
+  const replacements = findReplacementsArray(parsed);
+  if (Array.isArray(replacements) && replacements.length) {
+    return {
+      replacements: replacements.map((item) => {
+        const value = String(item.value || '').trim();
+        const original = String(item.original || item.source || item.text || '').trim();
+        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) throw new Error('AI 输出包含不合法变量');
+        if (!original) throw new Error('AI 输出的 replacement 缺少 original 片段');
+        return { original, name: String(item.name || value), value, valid: true, source: 'ai' };
+      }),
+      templateText: '',
+      variables: [],
+    };
+  }
   const values = Array.isArray(parsed) ? parsed : findVariablesArray(parsed);
   const templateText = String(parsed.templateText || parsed.template || parsed.reportTemplate || '').trim()
     || String(sourceText || '').trim();
@@ -346,7 +399,17 @@ function parseAiReport(output, sourceText = '') {
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) throw new Error('AI 输出包含不合法变量');
     return { name: String(item.name || value), value, valid: true, source: 'ai' };
   }) : extractDoubleBraceVariables(templateText).map((value) => ({ name: value, value, valid: true, source: 'templateText' }));
-  return { templateText, variables };
+  return { replacements: [], templateText, variables };
+}
+
+function findReplacementsArray(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (Array.isArray(value.replacements)) return value.replacements;
+  for (const child of Object.values(value)) {
+    const found = findReplacementsArray(child);
+    if (found) return found;
+  }
+  return null;
 }
 
 function findVariablesArray(value) {
@@ -361,16 +424,29 @@ function findVariablesArray(value) {
 
 function extractJsonText(output) {
   const text = String(output || '');
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i)?.[1];
-  if (fenced) return fenced;
+  const candidates = [];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  if (fenced) candidates.push(fenced.trim());
+  candidates.push(text.trim());
+  const braced = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0];
+  if (braced) candidates.push(braced);
   for (const line of text.split('\n').reverse()) {
     const trimmed = line.trim();
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) return trimmed;
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) candidates.push(trimmed);
   }
-  return text.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] || '';
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // 不是合法 JSON，尝试下一个候选
+    }
+  }
+  return text.trim();
 }
 
-function buildAiInput(prompt, standardVariables, text) {
+function buildAiInput(prompt, standardVariables, currentTemplateVariables, templateContent) {
   const input = {
     userPrompt: String(prompt || '').trim() || '无额外提示词',
     existingVariables: standardVariables.map((item) => ({
@@ -379,50 +455,120 @@ function buildAiInput(prompt, standardVariables, text) {
       type: item.type,
       description: item.description || '',
     })),
-    templateContent: String(text || '').trim(),
+    currentTemplateVariables: (currentTemplateVariables || []).map((item) => ({
+      name: item.name,
+      value: item.value,
+    })),
+    templateContent: String(templateContent || '').trim(),
   };
-  return `# 任务
-你是签字页报告模板变量提取助手。请参考已存在的变量、参考模板文案，输出替换变量后的全部模板文案。
+  return `提取签字页模板中按签署方变化的动态内容（公司名称、签署人、日期、编号等），供批量生成正式签署页时替换为各签署方的实际值；固定描述文字保持原样。
 
-# 输入参数 JSON
+# 输入
 ${JSON.stringify(input, null, 2)}
+- userPrompt：用户提示词，其中明确指定的变量 value 必须采用
+- existingVariables：系统已有变量，语义相关时必须复用其 value，不要重新命名
+- currentTemplateVariables：本模板上次提取的变量，语义相关时优先沿用
+- templateContent：模板全文，含原始 HTML 标签（表格、加粗、下划线等）
 
-# 输入一：用户提示词
-见输入参数 JSON 的 userPrompt。用户提示词中明确指定的变量 value 必须出现在输出中。
-
-# 输入二：系统已有变量
-见输入参数 JSON 的 existingVariables。这里是参考已存在的变量；语义相关时必须复用已有变量的 value，不要重新命名。
-
-# 输入三：模板内容
-见输入参数 JSON 的 templateContent。这里是参考模板文案；templateText 必须保留完整模板内容，只把变量位置替换为 {{变量值}}。
-
-# 处理步骤
-1. 阅读 userPrompt，提取用户明确要求使用或创建的变量 value。
-2. 阅读 existingVariables，确定可复用的系统变量。
-3. 阅读 templateContent，判断哪些文字应该变量化。
-4. 输出替换变量后的全部模板文案到 templateText，并在变量位置插入 {{变量值}}。
-5. 从 templateText 中按首次出现顺序去重生成 variables。
-
-# 输出要求
-只能输出严格 JSON，不要输出 Markdown，不要解释。JSON 结构如下：
-{
-  "templateText": "完整报告模板正文，变量位置使用 {{variableId}}",
-  "variables": [
-    { "name": "变量名", "value": "variableId" }
-  ]
-}
+# 输出（严格 JSON，禁止 Markdown 与解释，禁止输出 templateText 或重写模板）
+{"replacements":[{"original":"需要变量化的原文精确片段","name":"变量中文名","value":"variableId"}]}
 
 规则：
-1. templateText 必须是完整报告模板，不是摘要。
-2. templateText 中必须穿插 {{变量值}}，变量值必须以英文字母开头，只能包含英文、数字、下划线。
-3. variables 必须来自 templateText 中出现过的 {{变量值}}，并按首次出现顺序去重。
-4. 如果变量能和“系统已有变量”匹配，value 必须使用已有变量的 value。
-5. 如果没有匹配的已有变量，可以创建新 value，并在 variables 中给出中文 name。
-6. 如果 userPrompt 明确指定某个 value，例如 companyName 或 signerName，且模板内容有对应语义位置，必须在 templateText 中使用该 value。
+1. original 必须是 templateContent 的连续子串，逐字符一致（含空格、标点），不要包含 HTML 标签（给“【张三】”而非“<u>【张三】</u>”）；系统会在原模板上替换所有出现的 original，标签与格式自动保留。
+2. 只变量化动态内容；“本页无正文”、法规全称等固定文字不要输出。
+3. value 以英文字母开头，仅含英文、数字、下划线。
+4. 语义相关时必须复用已有变量 value；无匹配才创建新 value 并配中文 name。
 
-示例：
-输入模板内容为“公司名称：星河科技股份有限公司”，已有变量包含 {"name":"公司名称","value":"companyName"} 时，应输出：
-{"templateText":"公司名称：{{companyName}}","variables":[{"name":"公司名称","value":"companyName"}]}`;
+示例：templateContent 为“公司名称：<u>星河科技</u>，日期：2026年9月3日”时输出：
+{"replacements":[{"original":"星河科技","name":"公司名称","value":"companyName"},{"original":"2026年9月3日","name":"签署日期","value":"signDate"}]}`;
+}
+
+function applyReplacements(source, replacements) {
+  const sorted = [...replacements].sort((a, b) => b.original.length - a.original.length);
+  let text = String(source || '');
+  const items = [];
+  for (const item of sorted) {
+    if (!item.original) continue;
+    const target = findReplacementTarget(text, item.original);
+    if (!target) continue;
+    text = text.split(target).join(`{{${item.value}}}`);
+    items.push(item);
+  }
+  return { text, items };
+}
+
+function findReplacementTarget(source, original) {
+  if (!/<[^>]+>/.test(original)) {
+    return source.includes(original) ? original : '';
+  }
+  // 片段含 HTML 标签时按优先级降级匹配，保证模板原有标签与固定标签词不被吃掉：
+  // 1. 剥离全部标签后的纯文本整体（如“<u>【张三】</u>” → “【张三】”，<u> 原样保留）
+  // 2. 最后一个文本段（如“日期：<strong>2026年</strong>” → “2026年”，保留“日期：”与 <strong>）
+  const stripped = original.replace(/<[^>]+>/g, '').trim();
+  if (stripped && source.includes(stripped)) return stripped;
+  const textSegments = original.split(/(<[^>]+>)/).filter((segment) => !/^<[^>]+>$/.test(segment) && segment.trim());
+  const last = textSegments.at(-1)?.trim();
+  if (last && source.includes(last)) return last;
+  return '';
+}
+
+function deriveReplacementsFromText(source, templateText) {
+  const sourceText = String(source || '');
+  const parts = String(templateText || '').split(/(\{\{\s*[A-Za-z][A-Za-z0-9_]*\s*\}\})/);
+  const replacements = [];
+  let cursor = 0;
+  let pendingValue = '';
+  for (const part of parts) {
+    if (!part) continue;
+    const placeholder = part.match(/^\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}$/);
+    if (placeholder) {
+      pendingValue = placeholder[1];
+      continue;
+    }
+    const index = sourceText.indexOf(part, cursor);
+    if (index < 0) {
+      pendingValue = '';
+      continue;
+    }
+    if (pendingValue && index > cursor) {
+      replacements.push({ original: sourceText.slice(cursor, index), name: pendingValue, value: pendingValue });
+    }
+    pendingValue = '';
+    cursor = index + part.length;
+  }
+  return replacements;
+}
+
+function hasHtmlMarkup(html) {
+  return /<\/?[a-z][^>]*>/i.test(String(html || ''));
+}
+
+function normalizePreviewHtml(html) {
+  return String(html || '').replace(/<span class="variable-chip"[^>]*>(\{\{[^<]*?\}\})<\/span>/g, '$1');
+}
+
+function sanitizeHtml(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/javascript:/gi, '');
+}
+
+function htmlToPlainText(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|table|h[1-6]|li)>/gi, '\n')
+    .replace(/<\/t[dh]>/gi, '\t')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function extractDoubleBraceVariables(text) {
@@ -443,7 +589,7 @@ function completeTemplateText(templateText, prompt, standardVariables) {
 
 function replaceLabeledValue(text, label, value) {
   const escapedLabel = escapeRegExp(label);
-  return text.replace(new RegExp(`(${escapedLabel}\\s*[：:])([^\\n\\r]+)`, 'g'), `$1{{${value}}}`);
+  return text.replace(new RegExp(`(${escapedLabel}\\s*[：:])([^\\n\\r<>]+)`, 'g'), `$1{{${value}}}`);
 }
 
 function extractPromptVariableHints(prompt, templateText) {
@@ -472,13 +618,18 @@ function mergeVariables(variableValues, aiVariables) {
   return variableValues.map((value) => byValue.get(value) || { name: value, value, valid: true, source: 'templateText' });
 }
 
-function renderHighlightedTemplate(text, variables) {
+function renderHighlightedTemplate(text, variables, isHtml = false) {
   const known = new Map(variables.map((item) => [item.value, item]));
-  return escapeHtml(text).replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, value) => {
+  const renderChip = (_, value) => {
     const variable = known.get(value);
     const status = variable?.matchStatus === 'existing' ? 'existing' : 'new';
     return `<span class="variable-chip" data-status="${status}" data-variable="${value}">{{${value}}}</span>`;
-  }).replace(/\n/g, '<br>');
+  };
+  const source = String(text || '');
+  if (isHtml) {
+    return sanitizeHtml(source).replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, renderChip);
+  }
+  return escapeHtml(source).replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, renderChip).replace(/\n/g, '<br>');
 }
 
 async function callAgnesModel(content) {
@@ -495,7 +646,7 @@ async function callAgnesModel(content) {
       body: JSON.stringify({
         model: agnesConfig.model,
         messages: [
-          { role: 'system', content: '你是签字页报告模板变量提取助手。必须输出严格 JSON，且必须包含 templateText 和 variables 两个字段；templateText 必须是完整报告模板正文，并在变量位置穿插 {{变量值}}。' },
+          { role: 'system', content: '你是签字页报告模板变量提取助手。必须输出严格 JSON，且必须包含 replacements 字段；replacements 中每项必须包含 original（模板原文的精确片段，不要包含 HTML 标签）、name（中文变量名）、value（英文变量值）。' },
           { role: 'user', content },
         ],
         temperature: 0,
@@ -524,8 +675,9 @@ function alignVariables(extractedVariables, standardVariables) {
     .map((item) => {
       const matched = byValue.get(String(item.value).toLowerCase()) || byName.get(String(item.name).toLowerCase());
       const value = matched?.value || item.value;
-      if (seen.has(value)) return null;
-      seen.add(value);
+      const dedupKey = String(value).toLowerCase();
+      if (seen.has(dedupKey)) return null;
+      seen.add(dedupKey);
       return {
         ...item,
         name: matched?.name || item.name,
@@ -552,6 +704,7 @@ function buildTemplate(input, current, fallbackId) {
     previousPreviewText: String(input.previousPreviewText ?? current?.previousPreviewText ?? ''),
     previousPreviewHtml: String(input.previousPreviewHtml ?? current?.previousPreviewHtml ?? ''),
     aiRuns: input.aiRuns || current?.aiRuns || [],
+    aiDebug: input.aiDebug || current?.aiDebug || null,
     status: input.status || current?.status || 'active',
     createdAt: current?.createdAt || timestamp,
     updatedAt: timestamp,
@@ -617,7 +770,17 @@ function defaultPrompts() {
   return [{
     id: 'extract-template-variables',
     name: '提取模板变量',
-    content: '请识别模板中适合变量化的内容。优先复用系统已有变量；没有对应变量时再创建新的变量值。输出完整报告模板正文，并在变量位置使用 {{变量值}}。',
+    content: `提取模板中按签署方变化的动态内容（公司名称、签署人、日期、编号等）并变量化，供批量生成正式签署页时替换为各签署方的实际值；固定描述文字保持原样。
+
+【输入】existingVariables（系统已有变量）、currentTemplateVariables（本模板上次提取的变量）、templateContent（模板全文，含 HTML 格式）
+
+【输出】只输出严格 JSON：{"replacements":[{"original":"需要变量化的原文精确片段","name":"变量中文名","value":"variableId"}]}
+
+【规则】
+1. original 必须是 templateContent 的连续子串、逐字符一致，不要包含 HTML 标签（给"【张三】"而非"<u>【张三】</u>"）；系统会在原模板上替换，标签与格式自动保留；
+2. 只变量化动态内容，"本页无正文"、法规全称等固定文字不要输出；
+3. value 以英文字母开头，仅含英文、数字、下划线；
+4. 语义相关时必须复用 existingVariables 或 currentTemplateVariables 的 value；无匹配才创建新 value 并配中文 name。`,
     updatedAt: new Date().toISOString(),
   }];
 }

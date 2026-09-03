@@ -16,7 +16,10 @@ test('template and variable management use independent pages with template menu 
   assert.ok(templates.includes('id="aiStatus"'));
   assert.ok(templates.includes('class="template-tabs"'));
   assert.ok(templates.includes('data-tab="preview"'));
-  assert.ok(templates.includes('data-panel="ai"'));
+  assert.ok(!templates.includes('data-tab="ai"'));
+  assert.ok(!templates.includes('data-panel="ai"'));
+  assert.ok(templates.includes('data-panel="variables"'));
+  assert.ok(templates.indexOf('id="templateVariables"') < templates.indexOf('id="aiPrompt"'));
   assert.ok(variables.includes('id="variableModule"'));
   assert.ok(!variables.includes('id="templateModule"'));
   assert.ok(templates.indexOf('/templates.html') < templates.indexOf('/variables.html'));

@@ -335,10 +335,53 @@ code {
   color: #b42318;
 }
 
+.ai-debug {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-debug details {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.ai-debug summary {
+  cursor: pointer;
+  padding: 7px 10px;
+  color: #475569;
+  font-weight: 600;
+  user-select: none;
+}
+
+.ai-debug summary:hover {
+  color: #164fc6;
+}
+
+.ai-debug pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #0f172a;
+  color: #d7e2f2;
+  border-radius: 0 0 6px 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 360px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .token-list {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5eaf2;
 }
 
 .token-list span {

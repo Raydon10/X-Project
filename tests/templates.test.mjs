@@ -183,19 +183,16 @@ test('sends prompt existing variables and template content as connected AI input
       return '{"templateText":"公司名称：{{companyName}}","variables":[{"name":"公司名称","value":"companyName"}]}';
     });
 
-    assert.match(aiInput, /# 任务/);
-    assert.match(aiInput, /# 输入一：用户提示词/);
+    assert.match(aiInput, /批量生成正式签署页/);
+    assert.match(aiInput, /# 输入/);
     assert.match(aiInput, /识别公司名称变量/);
-    assert.match(aiInput, /# 输入二：系统已有变量/);
     assert.match(aiInput, /"value": "companyName"/);
-    assert.match(aiInput, /# 输入三：模板内容/);
+    assert.match(aiInput, /templateContent/);
     assert.match(aiInput, /公司名称：星河科技/);
-    assert.match(aiInput, /参考已存在的变量/);
-    assert.match(aiInput, /参考模板文案/);
-    assert.match(aiInput, /输出替换变量后的全部模板文案/);
-    assert.match(aiInput, /# 输出要求/);
-    assert.match(aiInput, /templateText/);
-    assert.match(aiInput, /variables/);
+    assert.match(aiInput, /禁止输出 templateText/);
+    assert.match(aiInput, /replacements/);
+    assert.match(aiInput, /original/);
+    assert.ok(aiInput.length < 2600);
   });
 });
 
@@ -242,6 +239,168 @@ test('does not overwrite extracted variables when cloud AI fails', async () => {
     const latest = await getTemplate(store, template.id);
     assert.deepEqual(latest.extractedVariables.map((item) => item.value), ['naturalPersonShareholder']);
     assert.equal(latest.aiRuns.at(-1).status, 'failed');
+  });
+});
+
+test('parses pretty-printed multiline JSON from the AI without losing variables', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '多行JSON模板', detail: '' }, { timestamp: 20260903121010 });
+    await updateTemplate(store, template.id, { previewText: '公司名称：星河科技' });
+
+    const updated = await analyzeTemplateVariables(store, template.id, { prompt: '提取变量' }, [], async () => `{
+  "templateText": "公司名称：{{companyName}}",
+  "variables": [
+    { "name": "公司名称", "value": "companyName" }
+  ]
+}`);
+
+    assert.equal(updated.previewText, '公司名称：{{companyName}}');
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName']);
+    assert.equal(updated.extractedVariables[0].matchStatus, 'new');
+  });
+});
+
+test('extracts variables from prose-wrapped AI output with surrounding text', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '杂质JSON模板', detail: '' }, { timestamp: 20260903121111 });
+    await updateTemplate(store, template.id, { previewText: '公司名称：星河科技' });
+
+    const updated = await analyzeTemplateVariables(store, template.id, { prompt: '提取变量' }, [], async () => '好的，提取结果如下：{"templateText":"公司名称：{{companyName}}","variables":[{"name":"公司名称","value":"companyName"}]} 以上。');
+
+    assert.equal(updated.previewText, '公司名称：{{companyName}}');
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName']);
+  });
+});
+
+test('applies AI replacements on the original HTML template while preserving all formatting', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '格式保留模板', detail: '' }, { timestamp: 20260903130001 });
+    const sourceHtml = '<p>公司名称：<u>星河科技</u></p><table><tbody><tr><td>负责人：【张三】</td><td>日期：2026年9月3日</td></tr></tbody></table>';
+    const sourceText = '公司名称：星河科技\n负责人：【张三】 日期：2026年9月3日';
+    await updateTemplate(store, template.id, { previewText: sourceText, previewHtml: sourceHtml });
+
+    const updated = await analyzeTemplateVariables(store, template.id, {
+      prompt: '提取变量',
+      textOverride: sourceText,
+      textHtml: sourceHtml,
+    }, [
+      { name: '公司名称', value: 'companyName', type: 'single' },
+    ], async () => JSON.stringify({
+      replacements: [
+        { original: '星河科技', name: '公司名称', value: 'companyName' },
+        { original: '【张三】', name: '负责人', value: 'firmHeadName' },
+        { original: '2026年9月3日', name: '签署日期', value: 'signDate' },
+      ],
+    }));
+
+    assert.match(updated.previewHtml, /<u><span class="variable-chip" data-status="existing" data-variable="companyName">\{\{companyName\}\}<\/span><\/u>/);
+    assert.match(updated.previewHtml, /<table><tbody><tr><td>负责人：<span class="variable-chip" data-status="new" data-variable="firmHeadName">/);
+    assert.match(updated.previewHtml, /<td>日期：<span class="variable-chip" data-status="new" data-variable="signDate">/);
+    assert.ok(updated.previewHtml.includes('</tbody></table>'));
+    assert.ok(!updated.previewHtml.includes('【张三】'));
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName', 'firmHeadName', 'signDate']);
+    assert.equal(updated.extractedVariables[0].matchStatus, 'existing');
+    assert.equal(updated.extractedVariables[1].matchStatus, 'new');
+    assert.equal(updated.extractedVariables[2].matchStatus, 'new');
+    assert.match(updated.previewText, /公司名称：\{\{companyName\}\}/);
+    assert.match(updated.previewText, /负责人：\{\{firmHeadName\}\}/);
+  });
+});
+
+test('replaces every occurrence of the same original fragment and skips unmatched ones', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '多处替换模板', detail: '' }, { timestamp: 20260903130101 });
+    await updateTemplate(store, template.id, { previewText: '星河科技与星河科技的合同' });
+
+    const updated = await analyzeTemplateVariables(store, template.id, { prompt: '提取变量' }, [], async () => JSON.stringify({
+      replacements: [
+        { original: '星河科技', name: '公司名称', value: 'companyName' },
+        { original: '这段文字不存在', name: '幽灵变量', value: 'ghostValue' },
+      ],
+    }));
+
+    assert.equal(updated.previewText, '{{companyName}}与{{companyName}}的合同');
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName']);
+    assert.ok(!updated.previewText.includes('ghostValue'));
+  });
+});
+
+test('keeps the latest raw AI input and output in aiDebug for troubleshooting', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '调试信息模板', detail: '' }, { timestamp: 20260903141010 });
+    await updateTemplate(store, template.id, { previewText: '公司名称：星河科技' });
+
+    const aiOutput = '{"replacements":[{"original":"星河科技","name":"公司名称","value":"companyName"}]}';
+    const updated = await analyzeTemplateVariables(store, template.id, { prompt: '提取变量' }, [], async (input) => {
+      assert.match(input, /提取签字页模板/);
+      assert.match(input, /公司名称：星河科技/);
+      return aiOutput;
+    });
+
+    assert.ok(updated.aiDebug);
+    assert.match(updated.aiDebug.input, /公司名称：星河科技/);
+    assert.match(updated.aiDebug.input, /"userPrompt": "提取变量"/);
+    assert.equal(updated.aiDebug.output, aiOutput);
+    assert.equal(updated.aiDebug.error, '');
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName']);
+
+    await assert.rejects(
+      analyzeTemplateVariables(store, template.id, { prompt: '再提取' }, [], async () => 'not json'),
+      /AI 提取失败/
+    );
+    const latest = await getTemplate(store, template.id);
+    assert.equal(latest.aiDebug.output, 'not json');
+    assert.match(latest.aiDebug.error, /JSON/);
+  });
+});
+
+test('strips HTML tags from AI original fragments so template formatting survives replacement', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '标签剥离模板', detail: '' }, { timestamp: 20260903150001 });
+    const sourceHtml = '<p>负责人：<u>【张三】</u></p><table><tbody><tr><td>日期：<strong>2026年9月3日</strong></td></tr></tbody></table>';
+    await updateTemplate(store, template.id, { previewText: '负责人：【张三】', previewHtml: sourceHtml });
+
+    const updated = await analyzeTemplateVariables(store, template.id, {
+      prompt: '提取变量',
+      textOverride: '负责人：【张三】',
+      textHtml: sourceHtml,
+    }, [], async () => JSON.stringify({
+      replacements: [
+        { original: '<u>【张三】</u>', name: '负责人', value: 'firmHead' },
+        { original: '日期：<strong>2026年9月3日</strong>', name: '签署日期', value: 'signDate' },
+      ],
+    }));
+
+    assert.match(updated.previewHtml, /<u><span class="variable-chip" data-status="new" data-variable="firmHead">\{\{firmHead\}\}<\/span><\/u>/);
+    assert.match(updated.previewHtml, /<td>日期：<strong><span class="variable-chip" data-status="new" data-variable="signDate">/);
+    assert.ok(updated.previewHtml.includes('</strong></td></tr></tbody></table>'));
+    assert.ok(!updated.previewHtml.includes('【张三】'));
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['firmHead', 'signDate']);
+  });
+});
+
+test('recovers replacements from legacy templateText via anchor alignment to preserve formatting', async () => {
+  await withStore(async (store) => {
+    const template = await createTemplate(store, { name: '锚点对齐模板', detail: '' }, { timestamp: 20260903160001 });
+    const sourceHtml = '<p>公司名称：星河科技</p><table><tbody><tr><td>负责人：【张三】</td></tr></tbody></table>';
+    await updateTemplate(store, template.id, { previewText: '公司名称：星河科技', previewHtml: sourceHtml });
+
+    const updated = await analyzeTemplateVariables(store, template.id, {
+      prompt: '提取变量',
+      textOverride: '公司名称：星河科技',
+      textHtml: sourceHtml,
+    }, [], async () => JSON.stringify({
+      templateText: '公司名称：{{companyName}}<table><tbody><tr><td>负责人：{{firmHead}}</table>',
+      variables: [
+        { name: '公司名称', value: 'companyName' },
+        { name: '负责人', value: 'firmHead' },
+      ],
+    }));
+
+    assert.match(updated.previewHtml, /<p>公司名称：<span class="variable-chip"[^>]*data-variable="companyName">/);
+    assert.match(updated.previewHtml, /<td>负责人：<span class="variable-chip"[^>]*data-variable="firmHead">/);
+    assert.ok(updated.previewHtml.includes('</td></tr></tbody></table>'));
+    assert.deepEqual(updated.extractedVariables.map((item) => item.value), ['companyName', 'firmHead']);
   });
 });
 

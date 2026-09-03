@@ -1,0 +1,71 @@
+✔ template and variable management use independent pages with template menu first (2.420791ms)
+✔ cloud AI config uses Agnes without exposing the API key (0.802708ms)
+✔ creates updates lists and deletes a template with a numeric timestamp id (7.525209ms)
+✔ imports a docx document as local original-format template data (3.438792ms)
+✔ builds a formatted docx html preview when importing docx bytes (11.135083ms)
+✔ preserves docx paragraph alignment color font size and tables in html preview (6.564125ms)
+✔ extracts variables with AI fallback and can restore the previous result (5.885125ms)
+✔ uses full AI report template text to update highlighted preview and deduplicated variables (2.994875ms)
+✔ sends prompt existing variables and template content as connected AI input sections (4.756875ms)
+✔ accepts AI variables-only response as fallback without losing extracted variables (2.413084ms)
+✔ uses explicit prompt variable hints to complete template placeholders when AI returns original text (2.7445ms)
+✔ does not overwrite extracted variables when cloud AI fails (2.684875ms)
+✔ parses pretty-printed multiline JSON from the AI without losing variables (2.620958ms)
+✔ extracts variables from prose-wrapped AI output with surrounding text (2.565041ms)
+✔ applies AI replacements on the original HTML template while preserving all formatting (2.459458ms)
+✔ replaces every occurrence of the same original fragment and skips unmatched ones (2.625875ms)
+✖ keeps the latest raw AI input and output in aiDebug for troubleshooting (2.93375ms)
+✔ strips HTML tags from AI original fragments so template formatting survives replacement (2.891083ms)
+✔ recovers replacements from legacy templateText via anchor alignment to preserve formatting (2.288084ms)
+✔ creates a single variable and rejects duplicate variable values (7.277542ms)
+✔ creates an enum variable without predefined enum options (2.148542ms)
+✔ updates a variable and appends a readable change log (2.04725ms)
+✔ deletes a variable from the list and records deletion in audit logs (2.450708ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 22
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.142167
+
+✖ failing tests:
+
+test at tests/templates.test.mjs:328:1
+✖ keeps the latest raw AI input and output in aiDebug for troubleshooting (2.93375ms)
+  Error: AI 提取失败：The input did not match the regular expression /# 任务/. Input:
+  
+  '提取签字页模板中按签署方变化的动态内容（公司名称、签署人、日期、编号等），供批量生成正式签署页时替换为各签署方的实际值；固定描述文字保持原样。\n' +
+    '\n' +
+    '# 输入\n' +
+    '{\n' +
+    '  "userPrompt": "提取变量",\n' +
+    '  "existingVariables": [],\n' +
+    '  "currentTemplateVariables": [],\n' +
+    '  "templateContent": "公司名称：星河科技"\n' +
+    '}\n' +
+    '- userPrompt：用户提示词，其中明确指定的变量 value 必须采用\n' +
+    '- existingVariables：系统已有变量，语义相关时必须复用其 value，不要重新命名\n' +
+    '- currentTemplateVariables：本模板上次提取的变量，语义相关时优先沿用\n' +
+    '- templateContent：模板全文，含原始 HTML 标签（表格、加粗、下划线等）\n' +
+    '\n' +
+    '# 输出（严格 JSON，禁止 Markdown 与解释，禁止输出 templateText 或重写模板）\n' +
+    '{"replacements":[{"original":"需要变量化的原文精确片段","name":"变量中文名","value":"variableId"}]}\n' +
+    '\n' +
+    '规则：\n' +
+    '1. original 必须是 templateContent 的连续子串，逐字符一致（含空格、标点），不要包含 HTML 标签（给“【张三】”而非“<u>【张三】</u>”）；系统会在原模板上替换所有出现的 original，标签与格式自动保留。\n' +
+    '2. 只变量化动态内容；“本页无正文”、法规全称等固定文字不要输出。\n' +
+    '3. value 以英文字母开头，仅含英文、数字、下划线。\n' +
+    '4. 语义相关时必须复用已有变量 value；无匹配才创建新 value 并配中文 name。\n' +
+    '\n' +
+    '示例：templateContent 为“公司名称：<u>星河科技</u>，日期：2026年9月3日”时输出：\n' +
+    '{"replacements":[{"original":"星河科技","name":"公司名称","value":"companyName"},{"original":"2026年9月3日","name":"签署日期","value":"signDate"}]}'
+  
+      at analyzeTemplateVariables (file:///Users/raydon/appProjects/junheProject/src/templates.mjs:201:11)
+      at async file:///Users/raydon/appProjects/junheProject/tests/templates.test.mjs:334:21
+      at async withStore (file:///Users/raydon/appProjects/junheProject/tests/templates.test.mjs:33:5)
+      at async TestContext.<anonymous> (file:///Users/raydon/appProjects/junheProject/tests/templates.test.mjs:329:3)
+      at async Test.run (node:internal/test_runner/test:1208:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+EXIT=1

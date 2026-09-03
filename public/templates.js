@@ -18,6 +18,7 @@ const aiTools = document.querySelector('#aiTools');
 const scanButton = document.querySelector('#scanAiTools');
 const extractButton = document.querySelector('#extractVariables');
 const aiStatus = document.querySelector('#aiStatus');
+const aiDebug = document.querySelector('#aiDebug');
 const documentStatus = document.querySelector('#templateDocumentStatus');
 const variableStatus = document.querySelector('#templateVariableStatus');
 
@@ -82,7 +83,26 @@ function selectTemplate(template) {
     `).join('')
     : '<p class="empty">暂无提取变量</p>';
   templateLogs.innerHTML = renderLogs(template?.changeLogs);
+  renderAiDebug(template?.aiDebug);
   renderTemplates();
+}
+
+function renderAiDebug(debug) {
+  if (!debug) {
+    aiDebug.innerHTML = '';
+    return;
+  }
+  const sections = [
+    { title: `发送给 AI 的完整输入（${formatTime(debug.createdAt)}，${debug.input.length} 字符）`, body: debug.input },
+    { title: 'AI 原始返回', body: debug.output || '（空）' },
+    ...(debug.error ? [{ title: `错误信息`, body: debug.error }] : []),
+  ];
+  aiDebug.innerHTML = sections.map((section) => `
+    <details>
+      <summary>${escapeHtml(section.title)}</summary>
+      <pre>${escapeHtml(section.body)}</pre>
+    </details>
+  `).join('');
 }
 
 function activateTab(name) {
@@ -188,7 +208,7 @@ async function extractTemplateVariables() {
   try {
     const saved = await request(`/api/templates/${selectedTemplateId}/extract-variables`, {
       method: 'POST',
-      body: JSON.stringify({ prompt: aiPrompt.value, textOverride: preview.textContent }),
+      body: JSON.stringify({ prompt: aiPrompt.value, textOverride: preview.textContent, textHtml: preview.innerHTML }),
     });
     const count = saved.extractedVariables?.length || 0;
     const newCount = saved.extractedVariables?.filter((item) => item.matchStatus === 'new').length || 0;
@@ -197,10 +217,16 @@ async function extractTemplateVariables() {
     notice(toast, message);
     await loadTemplates();
     selectTemplate(saved);
-    activateTab('preview');
+    activateTab('variables');
   } catch (error) {
     setAiStatus(error.message, true);
     notice(toast, error.message, true);
+    await loadTemplates();
+    const current = templates.find((item) => String(item.id) === String(selectedTemplateId));
+    if (current) {
+      selectedTemplateId = current.id;
+      selectTemplate(current);
+    }
   } finally {
     setButtonLoading(extractButton, false);
   }
@@ -213,7 +239,7 @@ async function restoreTemplateVariables() {
     notice(toast, '已还原上次提取');
     await loadTemplates();
     selectTemplate(saved);
-    activateTab('preview');
+    activateTab('variables');
   } catch (error) {
     notice(toast, error.message, true);
   }
